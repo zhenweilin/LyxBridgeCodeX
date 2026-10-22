@@ -1,0 +1,37 @@
+{
+  "name": "lyxbridgecodex",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:native": "node scripts/build-native.mjs",
+    "start": "node server/mcp.mjs",
+    "preview": "node server/preview.mjs",
+    "test": "node --test test/*.test.mjs",
+    "editor": "node server/native-broker.mjs demo/demo.lyx",
+    "test:native": "node --test --test-concurrency=1 test/native*.integration.mjs",
+    "configure": "node scripts/configure-plugin.mjs",
+    "package:release": "node scripts/package-release.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/server": "2.3.1",
+    "@openai/mcp-extensions": "0.2.1",
+    "katex": "0.18.2",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  },
+  "description": "Native LyX editing and document context for Codex",
+  "license": "(Apache-2.0 AND GPL-2.0-or-later)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhenweilin/LyxBridgeCodeX.git"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.native/
+.preview/
+release/
+plugins/lyx-preview/.mcp.json
+*.log
+.DS_Store
+*.lyx~
+*.lyx#
+.env
+.env.*

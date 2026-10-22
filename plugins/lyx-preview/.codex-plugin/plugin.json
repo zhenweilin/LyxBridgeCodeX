@@ -1,0 +1,16 @@
+{
+  "name": "lyx-preview",
+  "version": "0.3.0",
+  "description": "Native LyX editing and context-only selection sharing inside Codex. Experimental macOS source release.",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "LyxBridgeCodeX",
+    "shortDescription": "Native LyX editing, formulas, and add to chat",
+    "developerName": "Zhenwei Lin",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ]
+  }
+}

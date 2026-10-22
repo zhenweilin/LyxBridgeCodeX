@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LyX Preview</title>
+  <style>/* APP_CSS */</style>
+</head>
+<body>
+  <header class="toolbar">
+    <div><span class="brand">L<span>Y</span>X</span><strong id="filename">Document preview</strong><span id="sync" class="badge">Loading</span></div>
+    <button id="refresh" type="button" title="Reload the source file">Refresh</button>
+  </header>
+  <main>
+    <div class="instructions">Select text or a formula, click add to chat, and describe the changes you want.</div>
+    <article id="document" class="paper" oai-annotation-container-text aria-label="LyX document content"></article>
+    <aside id="warnings" hidden></aside>
+    <details class="details"><summary>Document information</summary><pre id="info"></pre></details>
+  </main>
+  <footer class="selection-bar">
+    <div><strong id="selection-status">No selection</strong><small id="connection">Connecting</small></div>
+    <button id="add-context" type="button" disabled>add to chat</button>
+  </footer>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <script type="module">/* APP_JS */</script>
+</body>
+</html>

@@ -1,0 +1,409 @@
+import {App} from '@modelcontextprotocol/ext-apps';
+import {OpenAIExtensions} from '@openai/mcp-extensions/app';
+import {writeBrowserClipboard,captureBrowserPaste,stageNativeImagePaste} from './native-clipboard.mjs';
+import {createNativeMenuClipboard} from './native-menu-clipboard.mjs';
+import {addNativeSelectionToChat} from './native-chat.mjs';
+import {createNativeInputQueue} from './native-input-queue.mjs';
+import {createNativeFrameLoop} from './native-frame-loop.mjs';
+import {createNativePointerDrag} from './native-pointer-drag.mjs';
+import {nativeImePosition} from './native-ime-position.mjs';
+import {createNativeIme} from './native-ime.mjs';
+import {normalizeNativeWheel,nativeWheelQueueOptions} from './native-wheel.mjs';
+const $ = id => document.getElementById(id);
+let descriptor, state, app, extensions, frameSerial = -1, pollRunning = false, composing = false, scale = 1, attachmentSerial=0;
+let inputQueue = Promise.resolve(), noticeTimer;
+let selectionClipboard,clipboardKey,clipboardRequest,editGeneration=0,pendingEdits=0,addingSelection=false;
+const nativeSurfaces=new Map();
+const nativeInputs=createNativeInputQueue();
+const standalone = window.parent === window;
+const rpcTimings=new Map();
+function recordRpcTiming(method,elapsed,target){
+  if(descriptor!==target)return;
+  const samples=rpcTimings.get(method)??[];
+  samples.push(elapsed);if(samples.length>60)samples.shift();rpcTimings.set(method,samples);
+  // Bounded, content-free diagnostics for measuring the actual host relay.
+  // Keep them out of the writing UI and never include document text or tokens.
+  const summary={};
+  for(const [name,values] of rpcTimings){
+    const sorted=[...values].sort((a,b)=>a-b);
+    summary[name]={samples:values.length,medianMs:+sorted[Math.floor(sorted.length/2)].toFixed(1),
+      p95Ms:+sorted[Math.min(sorted.length-1,Math.floor(sorted.length*.95))].toFixed(1)};
+  }
+  $('surfaces').dataset.rpcTimings=JSON.stringify(summary);
+}
+function notice(text) {$('notice').textContent = text;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{$('notice').textContent='';},9000);}
+async function rpc(method, params = {}, target=descriptor) {
+  if (!target) throw new Error('Native LyX is not connected');
+  const started=performance.now();
+  try{
+  if(!standalone){
+    const response=await app.callServerTool({name:'native_lyx_rpc',arguments:{sessionId:target.sessionId,method,params}});
+    if(response.isError)throw new Error(response.content?.find(item=>item.type==='text')?.text||'Native LyX operation failed');
+    const result=response._meta?.['lyx/rpc'];
+    if(!result || result.error)throw new Error(result?.message||result?.error||'The host did not return native LyX state');
+    if(method==='input' && params.replyWithState===true && descriptor===target)
+      $('surfaces').dataset.inputStateCombined=String(result.stateAfterInput===true);
+    return result;
+  }
+  const response = await fetch(target.url + '/rpc', {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${target.token}`},body:JSON.stringify({sessionId:target.sessionId,method,params})});
+  const result = await response.json();
+  if (!response.ok || result.error) throw new Error(result.message || result.error || 'LyX operation failed');
+  return result;
+  }finally{recordRpcTiming(method,performance.now()-started,target);}
+}
+let nativeMenuClipboard;
+function updateInputPosition(next) {
+  const metrics=next?.inputMethod;
+  if(!metrics?.enabled)return;
+  const surface=nativeSurfaces.get(metrics.surface);
+  const image=$('surfaces').querySelector(`[data-surface="${metrics.surface}"]`);
+  if(!image || !surface)return;
+  const viewport=$('viewport');
+  const position=nativeImePosition({inputMethod:metrics,surface,image:image.getBoundingClientRect(),
+    viewport:viewport.getBoundingClientRect(),scrollLeft:viewport.scrollLeft,scrollTop:viewport.scrollTop});
+  if(!position)return;
+  Object.assign($('input').style,{left:`${position.left}px`,top:`${position.top}px`,
+    height:`${position.height}px`,lineHeight:`${position.height}px`,fontSize:`${position.height*.8}px`});
+}
+function showState(next) {
+  if (typeof next?.ready!=='boolean') return;
+  const wasReady=state?.ready;
+  state = next;
+  nativeMenuClipboard.update(next);
+  if(!next.ready){
+    if(wasReady)nativeMenuClipboard.invalidateGesture();
+    $('filename').textContent='No document open';$('filename').title='';
+    $('saved').textContent='';$('saved').title='';
+    $('save').disabled=$('add').disabled=true;
+    $('save').title='Open or create a document first';
+    $('add').title='Open a document and select text or a formula';
+    $('selection').textContent='Open or create a document using the File menu';
+    prepareClipboard(next);updateInputPosition(next);
+    return;
+  }
+  $('filename').textContent=next.path.split('/').at(-1);
+  $('filename').title=next.path;
+  $('saved').textContent=next.externalModified?'File changed on disk':next.modified?'Unsaved':'Saved';
+  $('saved').title=next.externalModified?'LyX detected an external change. Use the native reload or save conflict dialog to preserve your unsaved edits.':'';
+  $('selection').textContent=next.hasSelection?`Selected: ${next.selection.slice(0,55)}${next.selection.length>55?'…':''}`:'Select text or a formula in LyX';
+  const composingNow=composing || next.inputMethod?.composing;
+  $('save').disabled=!!composingNow;
+  $('save').title=composingNow?'Finish composing text before saving':'';
+  $('add').disabled=addingSelection || composingNow || !next.hasSelection || next.clipboardSelection?.kind==='widget' || !extensions?.modelContext;
+  $('add').title=!extensions?.modelContext
+    ? 'Open this .lyx file through the Codex plugin to connect to chat'
+    : composingNow?'Finish composing text before adding to chat'
+    : !next.hasSelection||next.clipboardSelection?.kind==='widget'?'Select text or a formula first':'Attach the selection as chat context';
+  prepareClipboard(next);
+  updateInputPosition(next);
+}
+function clipboardSelection(next){return next?.clipboardSelection??{kind:'document',hasSelection:next?.hasSelection,text:next?.selection,start:next?.selectionStart,end:next?.selectionEnd};}
+function selectionKey(next){const selection=clipboardSelection(next);return selection.hasSelection?JSON.stringify([editGeneration,next.path,selection]):null;}
+function prepareClipboard(next){
+  if(composing || next?.inputMethod?.composing){clipboardKey=undefined;selectionClipboard=undefined;return;}
+  const target=descriptor,menuClipboard=nativeMenuClipboard,key=selectionKey(next);
+  if(key===clipboardKey)return;
+  clipboardKey=key;selectionClipboard=undefined;
+  if(!key || clipboardRequest)return;
+  clipboardRequest=(async()=>{
+    try{
+      await inputQueue;
+      if(descriptor!==target || selectionKey(state)!==key)return;
+      const result=await rpc('clipboard',{action:'copy',expectedSelection:clipboardSelection(state),expectedPath:state.path},target);
+      if(descriptor===target && selectionKey(state)===key){
+        selectionClipboard=result.clipboard;
+        menuClipboard.prepare(state,selectionClipboard);
+      }
+    }catch{/* Selection prefetch is optional; copy IDs handle an uncached gesture. */}
+    finally{clipboardRequest=undefined;if(descriptor!==target || selectionKey(state)!==key){clipboardKey=undefined;prepareClipboard(state);}}
+  })();
+}
+function menuPoint(params){
+  return nativeSurfaces.get(params.surface)?.menuActions?.find(item=>!item.separator && item.enabled
+    && params.x>=item.x && params.y>=item.y && params.x<item.x+item.width && params.y<item.y+item.height);
+}
+function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParams}={}) {
+  const target=descriptor,menuClipboard=nativeMenuClipboard;
+  if(!target)return Promise.resolve();
+  frameLoop.request();
+  const menuPointer=method==='input' && params.type.startsWith('pointer') && menuPoint(params);
+  // Opening a menu preserves the document selection and the prepared MIME.
+  // Keep that snapshot until the native action has matched the browser copy.
+  const stableMenuPointer=menuPointer && (nativeSurfaces.get(params.surface)?.main
+    || params.type!=='pointerup' || ['copy','cut'].includes(menuPointer.clipboardAction));
+  if(!menuPointer && (method!=='input'||params.type!=='pointermove'||params.buttons))
+    menuClipboard.invalidateGesture();
+  const changesSelection=(method==='input' && !stableMenuPointer && (params.type!=='pointermove'||params.buttons)
+    && !(params.type.startsWith('key') && [0x1000020,0x1000021,0x1000022,0x1000023].includes(params.key)))
+    || method==='command'||method==='clipboard';
+  if(changesSelection){
+    pendingEdits++;
+    editGeneration++;selectionClipboard=undefined;clipboardKey=undefined;
+  }
+  inputQueue=nativeInputs.enqueue(async queuedParams=>{
+    // Reserve the operation's place before asynchronous paste preparation so
+    // later typing cannot overtake it or change its originating document.
+    const prepared=prepareParams?await prepareParams(queuedParams,{rpc:(operation,args)=>rpc(operation,args,target)}):queuedParams;
+    const needsState=changesSelection || menuPointer && params.type!=='pointermove';
+    const result=await rpc(method==='command'?'dispatch':method,
+      method==='input' && needsState?{...prepared,replyWithState:true}:prepared,target);
+    // Native input is posted to Qt's event loop. Its acknowledgement precedes
+    // the edit; fetch the resulting selection before enabling copy or cut.
+    // New MCP servers return that state in the input response. Older servers
+    // and the standalone broker ignore the option and use the original path.
+    const next=needsState && !(method==='input' && result.stateAfterInput===true)?await rpc('state',{},target):result;
+    if(descriptor===target)showState(next);
+    if(menuReceipt){
+      pendingEdits++;editGeneration++;selectionClipboard=undefined;clipboardKey=undefined;
+      try{
+        if(await menuClipboard.update(next,{receipt:menuReceipt})){
+          const committed=await rpc('state',{},target);
+          if(descriptor===target)showState(committed);
+        }
+      }finally{pendingEdits--;}
+    }
+  },{coalesceKey:coalesceKey?`${attachmentSerial}:${coalesceKey}`:undefined,data:params,merge:mergeParams}).catch(error=>{
+    if(descriptor===target)notice(error.message);
+  }).finally(()=>{
+    if(changesSelection)pendingEdits--;
+    // The input acknowledgement precedes Qt's edit; also wake after the state
+    // barrier so the last drag position is painted when interaction stops.
+    frameLoop.request();
+  });
+  return inputQueue;
+}
+function modifiers(e) {return{shift:e.shiftKey,alt:e.altKey,ctrl:e.ctrlKey,meta:e.metaKey};}
+async function poll() {
+  if (!descriptor || pollRunning || document.hidden) return;
+  pollRunning=true;
+  const sessionDescriptor=descriptor,generation=editGeneration,editsAtStart=pendingEdits;
+  try {
+    const size=$('viewport').getBoundingClientRect();
+    const frame=await rpc('frame',{width:Math.round(size.width),height:Math.round(size.height),serial:frameSerial},sessionDescriptor);
+    if(descriptor!==sessionDescriptor)return;
+    if(!editsAtStart && !pendingEdits && generation===editGeneration)showState(frame);
+    if (frame.surfaces) {
+      frameSerial=frame.serial;
+      nativeSurfaces.clear();
+      for(const surface of frame.surfaces)nativeSurfaces.set(surface.id,surface);
+      const container=$('surfaces');
+      scale=Math.min(1,size.width/frame.width);
+      container.style.width=`${frame.width}px`;container.style.height=`${frame.height}px`;
+      container.style.transform=`scale(${scale})`;
+      const active=new Set();
+      for (const surface of frame.surfaces) {
+        active.add(surface.id);
+        let image=container.querySelector(`[data-surface="${surface.id}"]`);
+        if (!image) {image=new Image();image.draggable=false;image.dataset.surface=surface.id;image.alt=surface.main?'LyX document editor':'LyX dialog';container.append(image);}
+        image.src=`data:image/png;base64,${surface.png}`;
+        Object.assign(image.style,{left:`${surface.x}px`,top:`${surface.y}px`,width:`${surface.width}px`,height:`${surface.height}px`,zIndex:surface.main?'0':'1'});
+      }
+      for(const image of container.children)if(!active.has(image.dataset.surface))image.remove();
+      updateInputPosition(state);
+      $('loading').hidden=true;
+    }
+  } catch(error) {
+    if(descriptor!==sessionDescriptor)return;
+    notice(error.message);$('saved').textContent='Connection error';throw error;
+  }
+  finally{pollRunning=false;}
+}
+// Request the next active frame promptly. The loop still allows only one
+// frame in flight, so a slower host/encoder cannot build a frame backlog.
+const frameLoop=createNativeFrameLoop({draw:poll,isVisible:()=>!document.hidden,activeInterval:16});
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){pointerDrag.cancel('hidden');ime.cancel();}else frameLoop.request();
+});
+window.addEventListener('resize',()=>frameLoop.request());
+window.addEventListener('blur',()=>{pointerDrag.cancel('blur');ime.cancel();});
+window.addEventListener('pagehide',()=>{pointerDrag.cancel('pagehide');ime.cancel();frameLoop.stop();});
+window.addEventListener('pageshow',()=>{if(descriptor){frameLoop.start();frameLoop.request();}});
+function attach(value) {
+  if (!value?.sessionId)return;
+  // Finish already queued input in its original engine. Clear live gestures
+  // before changing the descriptor so their cancellation also goes there.
+  pointerDrag.cancel('attachment');ime.cancel();pendingHover=undefined;
+  nativeMenuClipboard?.destroy();
+  descriptor={...value};attachmentSerial++;state=undefined;frameSerial=-1;
+  rpcTimings.clear();
+  delete $('surfaces').dataset.rpcTimings;delete $('surfaces').dataset.inputStateCombined;
+  const target=descriptor;
+  nativeMenuClipboard=createNativeMenuClipboard({
+    rpc:(method,params)=>rpc(method,params,target),
+    notice:text=>{if(descriptor===target)notice(text);},
+  });
+  selectionClipboard=clipboardKey=undefined;
+  nativeSurfaces.clear();$('surfaces').replaceChildren();
+  $('filename').textContent=value.path?.split('/').at(-1)||'LyX Editor';
+  $('filename').title=value.path||'';
+  $('saved').textContent='Connecting';$('saved').title='';
+  $('selection').textContent='Select text or a formula in LyX';
+  $('notice').textContent='';
+  for(const key of ['contextUpdateId','contextVerified','contextAttached'])delete $('add').dataset[key];
+  $('save').disabled=$('add').disabled=true;$('loading').hidden=false;
+  frameLoop.start();frameLoop.request();
+}
+const surfaces=$('surfaces');
+const pointerDrag=createNativePointerDrag({
+  capture:pointerId=>surfaces.setPointerCapture(pointerId),
+  release:pointerId=>{if(surfaces.hasPointerCapture(pointerId))surfaces.releasePointerCapture(pointerId);},
+  emitCancel:params=>{
+    pendingHover=undefined;
+    nativeMenuClipboard?.invalidateGesture();
+    // Older running engines do not know cancellation yet. Never emulate it
+    // with a mouseup, which could activate a menu or document inset.
+    if(state?.capabilities?.pointerCancel)queue('input',params);
+  },
+});
+let pendingHover,hoverScheduled=false;
+function scheduleHover(params){
+  pendingHover=params;
+  if(hoverScheduled)return;
+  hoverScheduled=true;
+  setTimeout(async()=>{
+    const current=pendingHover;pendingHover=undefined;
+    if(!pointerDrag.active && current)await queue('input',current);
+    hoverScheduled=false;
+    if(pendingHover)scheduleHover(pendingHover);
+  },32);
+}
+for (const type of ['pointerdown','pointermove','pointerup']) surfaces.addEventListener(type,event=>{
+  const dragging=pointerDrag.active;
+  if(dragging && (dragging.pointerId!==event.pointerId || type==='pointerdown'))return;
+  if(!dragging && type==='pointerup')return;
+  let image=dragging?.image || event.target.closest('img[data-surface]');
+  if(!image)return;
+  const bounds=image.getBoundingClientRect();
+  const params={type,surface:image.dataset.surface,x:Math.round((event.clientX-bounds.left)/scale),y:Math.round((event.clientY-bounds.top)/scale),button:event.button,buttons:event.buttons,...modifiers(event)};
+  if(type==='pointermove'&&!dragging){if(!params.buttons)scheduleHover(params);return;}
+  event.preventDefault();
+  if(type==='pointerdown'){
+    pendingHover=undefined;
+    if(pendingEdits)nativeMenuClipboard.invalidateGesture();
+    try{if(!pointerDrag.start({image,pointerId:event.pointerId,params}))return;}
+    catch(error){notice(error.message);return;}
+    $('input').style.left=`${Math.max(0,event.clientX-$('viewport').getBoundingClientRect().left)}px`;
+    $('input').style.top=`${Math.max(0,event.clientY-$('viewport').getBoundingClientRect().top)}px`;
+    $('input').focus({preventScroll:true});
+  }else if(!pointerDrag.update(event.pointerId,params))return;
+  const menuReceipt=nativeMenuClipboard.handlePointer({...params,pointerId:event.pointerId},
+    {surface:nativeSurfaces.get(params.surface),state,clipboard:selectionClipboard});
+  // Only a waiting document drag can be replaced. Every down/up, menu event,
+  // key, modifier or surface change remains an ordering barrier.
+  const coalesceKey=type==='pointermove' && dragging?.pointerId===event.pointerId
+    && params.buttons===1 && nativeSurfaces.get(params.surface)?.main && !menuPoint(params)
+    ? JSON.stringify([event.pointerId,params.surface,params.buttons,params.shift,params.alt,params.ctrl,params.meta])
+    : undefined;
+  queue('input',params,{menuReceipt,coalesceKey});
+  if(type==='pointerup')pointerDrag.end(event.pointerId);
+});
+for(const type of ['pointercancel','lostpointercapture'])surfaces.addEventListener(type,event=>{
+  pointerDrag.cancel(type,{pointerId:event.pointerId});
+});
+surfaces.addEventListener('dblclick',event=>{
+  const image=event.target.closest('img[data-surface]');if(!image)return;
+  const r=image.getBoundingClientRect();
+  queue('input',{type:'dblclick',surface:image.dataset.surface,x:Math.round((event.clientX-r.left)/scale),y:Math.round((event.clientY-r.top)/scale),button:event.button,buttons:event.buttons,...modifiers(event)});
+});
+surfaces.addEventListener('contextmenu',event=>event.preventDefault());
+surfaces.addEventListener('wheel',event=>{
+  const image=event.target.closest('img[data-surface]');if(!image)return;
+  const params=normalizeNativeWheel(event,{surface:image.dataset.surface,bounds:image.getBoundingClientRect(),scale});
+  if(!params)return;
+  if(params.zoomFactor!==undefined && state?.capabilities?.wheelInput!==true){
+    event.preventDefault();notice('Zoom gestures require an updated native LyX engine. Use the native zoom controls in this session.');return;
+  }
+  const options=!pointerDrag.active && nativeSurfaces.size===1
+    ? nativeWheelQueueOptions(params,nativeSurfaces.get(params.surface)) : {};
+  event.preventDefault();queue('input',params,options);
+},{passive:false});
+const keys={Escape:0x1000000,Tab:0x1000001,Backspace:0x1000003,Enter:0x1000004,Insert:0x1000006,Delete:0x1000007,Home:0x1000010,End:0x1000011,ArrowLeft:0x1000012,ArrowUp:0x1000013,ArrowRight:0x1000014,ArrowDown:0x1000015,PageUp:0x1000016,PageDown:0x1000017,Shift:0x1000020,Control:0x1000021,Meta:0x1000022,Alt:0x1000023};
+for(let i=1;i<=35;i++)keys[`F${i}`]=0x100002f+i;
+const ime=createNativeIme({
+  emit:params=>queue('input',params),
+  clear:()=>{$('input').value='';},
+  onCompositionChange:value=>{composing=value;if(state)showState(state);},
+});
+for(const type of ['keydown','keyup'])$('input').addEventListener(type,event=>{
+  if(ime.key(event)!=='native')return;
+  const key=event.key==='Tab' && event.shiftKey?0x1000002
+    : keys[event.key] ?? (Array.from(event.key).length===1?event.key.toUpperCase().codePointAt(0):0);
+  if(!key)return;
+  event.preventDefault();
+  queue('input',{type,key,text:Array.from(event.key).length===1?event.key:'',repeat:event.repeat,...modifiers(event)});
+});
+for(const type of ['compositionstart','compositionupdate','compositionend','beforeinput','input'])
+  $('input').addEventListener(type,event=>ime[type](event));
+$('input').addEventListener('blur',()=>ime.cancel());
+$('input').addEventListener('paste',event=>{
+  event.preventDefault();
+  try{
+    const {payload,prepare}=captureBrowserPaste(event.clipboardData);
+    if(prepare)queue('clipboard',{action:'paste',...payload},{prepareParams:async(params,{rpc})=>{
+      // This snapshot follows earlier queued input and stays bound to the
+      // original session even if a different document attaches during reading.
+      const before=await rpc('selection');
+      if(before.capabilities?.imagePaste!==true)
+        throw new Error('This editor does not support image paste yet. Save your document, then close and reopen the editor to start the updated version.');
+      const prepared={...params,...await prepare(),expectedPath:before.path,
+        expectedSelection:clipboardSelection(before),expectedSourceRevision:before.sourceRevision};
+      return before.capabilities.imagePasteChunks===true?stageNativeImagePaste(prepared,rpc):prepared;
+    }});
+    else if(payload.copyId||Object.keys(payload.formats??{}).length)
+      queue('clipboard',{action:'paste',...payload});
+  }catch(error){notice(error.message);}
+});
+for(const type of ['copy','cut'])$('input').addEventListener(type,event=>{
+  // A browser clipboard event must finish synchronously. Never export an old
+  // snapshot and later cut a newer selection from the native input queue.
+  event.preventDefault();
+  if(pendingEdits){notice('The selection is still updating. Try copying or cutting again in a moment.');return;}
+  const selection=clipboardSelection(state);
+  if(!selection.hasSelection)return;
+  const copyId=crypto.randomUUID();
+  writeBrowserClipboard(event.clipboardData,{text:selection.text,copyId,clipboard:selectionClipboard});
+  queue('clipboard',{action:type,copyId,expectedSelection:selection,expectedPath:state.path});
+});
+for(const id of ['save','add'])$(id).addEventListener('pointerdown',event=>event.preventDefault());
+$('save').addEventListener('click',()=>queue('command',{command:'buffer-write'}));
+$('add').addEventListener('click',async()=>{
+  if(addingSelection || !descriptor)return;
+  const target=descriptor;
+  addingSelection=true;$('add').disabled=true;
+  for(const key of ['contextUpdateId','contextVerified','contextAttached'])delete $('add').dataset[key];
+  try{
+    // Capture at this click's position in the input queue. Waiting on its last
+    // promise alone lets a newer edit run before this continuation resumes.
+    const selection=await nativeInputs.enqueue(()=>rpc('selection',{},target));
+    const accepted=await addNativeSelectionToChat(selection,extensions,{sessionId:target.sessionId});
+    if(descriptor!==target)return;
+    $('add').dataset.contextUpdateId=accepted.updateId;
+    $('add').dataset.contextVerified=String(accepted.contextVerified);
+    $('add').dataset.contextAttached=String(accepted.contextAttached);
+    notice('Selection attached as chat context. Your draft is unchanged.');
+  }catch(error){if(descriptor===target)notice(error.message);}
+  finally{addingSelection=false;if(state)showState(state);}
+});
+if(standalone){
+  $('connection').textContent='Browser debug view · Not connected to chat. Open the .lyx file in Codex.';
+  $('add').title='This debug view supports editing. Open the file in Codex to add to chat.';
+  if(window.__LYX_NATIVE__)attach(window.__LYX_NATIVE__);
+  else notice('Open a .lyx file through the plugin, or start the native editor with a test file.');
+}else{
+  app=new App({name:'LyX Native Editor',version:'0.3.0'});
+  extensions=new OpenAIExtensions(app);
+  let connected=false,needsFileOpen=false;
+  async function openFile(){try{const result=await app.callServerTool({name:'start_native_lyx',arguments:{}});if(result.isError)throw new Error(result.content?.find(c=>c.type==='text')?.text||'Could not open the file');attach(result._meta?.['lyx/native']);}catch(error){notice(error.message);}}
+  app.addEventListener('toolinput',({arguments:args})=>{if(args?.file){needsFileOpen=true;if(connected)openFile();}});
+  app.ontoolresult=result=>attach(result._meta?.['lyx/native']);
+  try {
+    await app.connect();connected=true;
+    $('connection').textContent=extensions.modelContext?'Connected to this chat':'The host has not provided a chat context interface';
+    if(needsFileOpen&&!descriptor)await openFile();
+  } catch(error) {
+    $('connection').textContent='The plugin could not connect to this chat';
+    $('saved').textContent='Connection failed';
+    $('loading').textContent='Reopen the file. If the plugin was just installed or updated, restart Codex and try again.';
+    notice(error.message);
+  }
+}
