@@ -8,6 +8,7 @@ import {createNativeIme} from '../web/native-ime.mjs';
 
 test('real LyX: text input, native shortcuts, formula model, selection, save and reopen', {timeout: 120000}, async () => {
   const original = await readFile('demo/demo.lyx');
+  assert.match(original.toString(), /\\lyxformat 620\b/, 'The fixture exercises LyX 2.4 import');
   await mkdir('.native', {recursive:true});
   const directory = await mkdtemp(resolve('.native/integration-'));
   const path = join(directory, 'demo.lyx');
@@ -93,7 +94,9 @@ test('real LyX: text input, native shortcuts, formula model, selection, save and
     await key('S'.codePointAt(0), 's', {meta:true});
     const saved = await session.call('selection');
     assert.equal(saved.modified, false);
-    assert.match(await readFile(path,'utf8'), /\\begin_inset Formula \$x\^\{2\}\$/);
+    const savedSource=await readFile(path,'utf8');
+    assert.match(savedSource, /\\begin_inset Formula \$x\^\{2\}\$/);
+    assert.match(savedSource, /\\lyxformat 643\b/, 'Saving uses the LyX 2.5 native format');
     const frame = await session.call('frame', {width:1000,height:800});
     await writeFile(join(directory,'edited.png'), Buffer.from(frame.surfaces[0].png,'base64'));
     // A modal Qt dialog must not block the transport that supplies its input.

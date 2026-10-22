@@ -148,7 +148,8 @@ Native image paste fixture.
     await command('undo');assert.equal((await snapshot()).source,before.source);
     await command('redo');assert.equal((await snapshot()).source,pasted.source);
     await command('buffer-end');const afterImage=await snapshot();
-    const jpeg=await readFile('.native/lyx-source/lib/examples/Curricula_Vitae/REPLACEphoto.jpg');
+    const library=process.env.LYX_CODEX_LIBRARY??JSON.parse(await readFile('.native/engine.json','utf8')).library;
+    const jpeg=await readFile(join(library,'examples/Curricula_Vitae/REPLACEphoto.jpg'));
     await rpc('clipboard',guarded(afterImage,{mimeType:'image/jpeg',data:jpeg.toString('base64')}));
     await eventually(frame,value=>value.surfaces.some(s=>/save the pasted graphic/i.test(s.title)),'JPEG paste must use the same native image workflow');
     await key(0x1000000);

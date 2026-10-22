@@ -73,8 +73,7 @@ test('real LyX: external disk edits retain local content and require explicit na
       'Build the native bridge with externalModified state before running this test');
     assert.equal(initial.diskRevision, hash(original));
 
-    // The native file watcher deliberately marks even a previously clean buffer
-    // dirty. That flag must not be mistaken for evidence of local text changes.
+    // LyX 2.5 tracks an external modification separately from local edits.
     const firstDiskText = 'External edit while native buffer was clean';
     const firstDisk = appendParagraph(original.toString('utf8'), firstDiskText);
     await writeFile(path, firstDisk);
@@ -82,13 +81,8 @@ test('real LyX: external disk edits retain local content and require explicit na
       value => value.externalModified && value.diskRevision === hash(firstDisk),
       'LyX must report the external disk change');
     assert.equal(externalOnly.source, initial.source, 'Disk edits do not silently replace the native buffer');
+    assert.equal(externalOnly.modified, false, 'An external change is not a local edit in LyX 2.5');
     assert.equal(await readFile(path, 'utf8'), firstDisk);
-
-    // GuiView enables buffer-reload after LyX's asynchronous watcher marks the
-    // buffer dirty. The checksum fallback can report externalModified earlier.
-    const notified = await eventually(snapshot, value => value.modified && value.externalModified,
-      'The native watcher must make explicit Reload available for the external edit');
-    assert.equal(notified.source, initial.source);
 
     // Run the native command while keeping its result visible. A dispatch ACK
     // alone can conceal a disabled LFUN; the live dialog can still receive its

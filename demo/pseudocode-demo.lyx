@@ -1,0 +1,545 @@
+#LyX 2.4 created this file. For more info see https://www.lyx.org/
+\lyxformat 620
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\begin_preamble
+\usepackage[noEnd=false]{algpseudocodex}
+\end_preamble
+\use_default_options true
+\language english
+\inputencoding utf8
+\fontencoding auto
+\use_non_tex_fonts false
+\use_package amsmath 2
+\use_package amssymb 2
+\secnumdepth 3
+\tocdepth 3
+\tracking_changes false
+\output_changes false
+\end_header
+\begin_body
+\begin_layout Title
+LaTeX Pseudocode: Live Examples
+\end_layout
+
+\begin_layout Author
+LyxBridgeCodeX
+\end_layout
+
+\begin_layout Standard
+Click a rendered algorithm to reveal its LaTeX source. Click inside the red source box to edit. Click outside the block, or choose Render LaTeX Pseudocode from env, to compile the preview again.
+\end_layout
+
+\begin_layout Standard
+To create a new block, choose LaTeX Pseudocode from env. While editing its source, use LaTeX While, LaTeX For, or LaTeX If / Else to insert templates at the caret. Replace their example expressions with your own.
+\end_layout
+
+\begin_layout Section
+Nested While and For loops
+\end_layout
+
+\begin_layout Standard
+The numbered statements, keywords and indentation below are rendered by LaTeX. The full source is editable inside the preview block.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float algorithm
+placement h
+alignment document
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Nested While and For loops
+\begin_inset CommandInset label
+LatexCommand label
+name "alg:loops"
+
+\end_inset
+
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Preview
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+\backslash
+begin{minipage}{
+\backslash
+linewidth}
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+begin{algorithmic}[1]
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+Require $x_0
+\backslash
+in
+\backslash
+mathbb{R}^n$, $K>0$, $
+\backslash
+alpha>0$, $
+\backslash
+varepsilon>0$
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+State $x
+\backslash
+gets x_0$, $k
+\backslash
+gets 0$
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+While{$
+\backslash
+|g(x)
+\backslash
+|>
+\backslash
+varepsilon$ and $k<K$}
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+For{$i=1,
+\backslash
+ldots,n$}
+\end_layout
+
+\begin_layout Plain Layout
+    
+\backslash
+State $x_i
+\backslash
+gets x_i-
+\backslash
+alpha g_i(x)$
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+EndFor
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+State $k
+\backslash
+gets k+1$
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+EndWhile
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+State 
+\backslash
+Return $x$
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+end{algorithmic}
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+end{minipage}
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\begin_layout Standard
+Click here to leave the source block and display the compiled preview.
+\end_layout
+
+\begin_layout Section
+If, ElseIf, Else and Return
+\end_layout
+
+\begin_layout Standard
+The numbered statements, keywords and indentation below are rendered by LaTeX. The full source is editable inside the preview block.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float algorithm
+placement h
+alignment document
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+If, ElseIf, Else and Return
+\begin_inset CommandInset label
+LatexCommand label
+name "alg:branches"
+
+\end_inset
+
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Preview
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+\backslash
+begin{minipage}{
+\backslash
+linewidth}
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+begin{algorithmic}[1]
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+Function{Clip}{$x,
+\backslash
+ell,u$}
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+If{$x<
+\backslash
+ell$}
+\end_layout
+
+\begin_layout Plain Layout
+    
+\backslash
+State 
+\backslash
+Return $
+\backslash
+ell$ 
+\backslash
+Comment{Lower bound}
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+ElsIf{$x>u$}
+\end_layout
+
+\begin_layout Plain Layout
+    
+\backslash
+State 
+\backslash
+Return $u$ 
+\backslash
+Comment{Upper bound}
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+Else
+\end_layout
+
+\begin_layout Plain Layout
+    
+\backslash
+State 
+\backslash
+Return $x$
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+EndIf
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+EndFunction
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+State $z
+\backslash
+gets
+\backslash
+Call{Clip}{y,0,1}$
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+end{algorithmic}
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+end{minipage}
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\begin_layout Standard
+Click here to leave the source block and display the compiled preview.
+\end_layout
+
+\begin_layout Section
+Repeat, Procedure and ForAll
+\end_layout
+
+\begin_layout Standard
+The numbered statements, keywords and indentation below are rendered by LaTeX. The full source is editable inside the preview block.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float algorithm
+placement h
+alignment document
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Repeat, Procedure and ForAll
+\begin_inset CommandInset label
+LatexCommand label
+name "alg:repeat"
+
+\end_inset
+
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Preview
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+\backslash
+begin{minipage}{
+\backslash
+linewidth}
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+begin{algorithmic}[1]
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+Procedure{Refine}{$x_0,
+\backslash
+varepsilon$}
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+State $x
+\backslash
+gets x_0$
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+Repeat
+\end_layout
+
+\begin_layout Plain Layout
+    
+\backslash
+State $x_{
+\backslash
+mathrm{old}}
+\backslash
+gets x$
+\end_layout
+
+\begin_layout Plain Layout
+    
+\backslash
+State $x
+\backslash
+gets T(x)$ 
+\backslash
+Comment{One iteration}
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+Until{$
+\backslash
+|x-x_{
+\backslash
+mathrm{old}}
+\backslash
+|
+\backslash
+leq
+\backslash
+varepsilon$}
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+State 
+\backslash
+Return $x$
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+EndProcedure
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+ForAll{$x_0
+\backslash
+in S$}
+\end_layout
+
+\begin_layout Plain Layout
+  
+\backslash
+State 
+\backslash
+Call{Refine}{$x_0,
+\backslash
+varepsilon$}
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+EndFor
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+end{algorithmic}
+\end_layout
+
+\begin_layout Plain Layout
+
+\backslash
+end{minipage}
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\end_inset
+
+\end_layout
+
+\begin_layout Standard
+Click here to leave the source block and display the compiled preview.
+\end_layout
+
+\end_body
+\end_document

@@ -4,6 +4,7 @@ import {resolve,join,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
+import {lyxUpstream} from '../lib/native-engine.mjs';
 
 const root=fileURLToPath(new URL('..',import.meta.url));
 const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
@@ -43,7 +44,7 @@ try{
     JSON.parse(await readFile(join(stage,'plugins/lyx-preview/.codex-plugin/plugin.json'),'utf8')).version];
   if(versions.some(version=>version!==pkg.version))throw new Error('Release versions disagree');
   const manifest={name:pkg.name,version:pkg.version,kind:'source-overlay',
-    upstream:{tag:'2.4.1',commit:'1d25832edcfde1eac543a7b7b82545319d79c1e3'},
+    upstream:{tag:lyxUpstream.version,commit:lyxUpstream.commit},
     testedCodex:{desktop:'26.1016.51333',build:'21161',cli:'0.163.0-alpha.11'},files};
   await writeFile(join(stage,'PACKAGE_MANIFEST.json'),JSON.stringify(manifest,null,2)+'\n');
   await mkdir(output,{recursive:true});

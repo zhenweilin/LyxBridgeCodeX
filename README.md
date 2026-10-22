@@ -2,12 +2,15 @@
 
 Native LyX editing inside Codex, with editable formulas and document context sharing.
 
-**v0.3.0 is an experimental source overlay for LyX 2.4.1, plus a Codex plugin.** It supplements official LyX source with a native editing bridge and presents that engine in a Codex side panel. This repository does not vendor the full LyX source or distribute a compiled application. Build the engine locally; this is not a standalone installer or a signed macOS application.
+**v0.3.0 is an experimental source overlay for LyX 2.5.3, plus a Codex plugin.** It supplements official LyX source with a native editing bridge and presents that engine in a Codex side panel. This repository does not vendor the full LyX source or distribute a compiled application. Build the engine locally; this is not a standalone installer or a signed macOS application.
 
 ## Features
 
 - Edit text and formulas using LyX's own document model, rendering, menus, and undo history.
 - Keep familiar keyboard shortcuts, including formula entry and undo.
+- Create native LyX recovery snapshots every minute while there are unsaved changes. Snapshots use `#filename.lyx#`; use **Save** to write the main `.lyx` file.
+- Choose paragraph environments in a list that fits the editor panel; scroll to all entries, including Standard, and confirm with Enter.
+- Open native menus within the editor panel, with scrolling for long menus and working submenus in narrow panels.
 - Copy and paste native LyX content while retaining editable formulas.
 - Select text or a formula and click **add to chat** to attach context to the next message. It inserts no text into the composer and does not send a message.
 - Let Codex read the current unsaved document and replace a selection with revision and input-state checks.
@@ -21,7 +24,7 @@ The interface is English. Document language is independent of interface language
 | **Codex desktop host** | **26.1016.51333 (build 21161)** |
 | Codex CLI used for plugin installation | 0.163.0-alpha.11 |
 | macOS / architecture | 26.7.1 / Apple Silicon arm64 |
-| LyX source / format | 2.4.1 / LyX 2.4 format 620 |
+| LyX source / format | 2.5.3 / format 643; imports 2.4 format 620 |
 | Qt development libraries | 5.15.2 |
 | Node.js used locally | 23.11.0 |
 
@@ -29,7 +32,7 @@ These are tested versions, not a guarantee for every earlier or later Codex rele
 
 ## Build and install
 
-Prerequisites: the Codex desktop app and CLI, Node.js 22 or newer with npm, Git, CMake, a C++ compiler (Xcode Command Line Tools on macOS), Python 3, and a complete Qt **5.15** development installation. The native CMake build also needs its usual LyX dependencies, including zlib, iconv, and Hunspell development files. A TeX distribution is needed for LyX PDF compilation/export.
+Prerequisites: the Codex desktop app and CLI, Node.js 22 or newer with npm, Git, CMake, a C++ compiler (Xcode Command Line Tools on macOS), Python 3, and a complete Qt **5.15** development installation including its matching QtGui private/QPA headers (`Qt5::GuiPrivate`). The native CMake build also needs its usual LyX dependencies, including zlib, iconv, and Hunspell development files. A TeX distribution is needed for LyX PDF compilation/export.
 
 Clone the repository. Packaged releases are currently on hold while testing continues:
 
@@ -43,11 +46,11 @@ npm run build
 To use your own upstream source checkout, first obtain the exact supported revision, then point the build at it:
 
 ```sh
-git clone --branch 2.4.1 --depth 1 https://codeberg.org/LyX-org/lyx.git ../lyx-2.4.1
-LYX_SOURCE_DIR="$(cd ../lyx-2.4.1 && pwd)" npm run build:native
+git clone --branch 2.5.3 --depth 1 https://codeberg.org/LyX-org/lyx.git ../lyx-2.5.3
+LYX_SOURCE_DIR="$(cd ../lyx-2.5.3 && pwd)" npm run build:native
 ```
 
-The script validates commit `1d25832edcfde1eac543a7b7b82545319d79c1e3` before patching. Use a dedicated Git checkout; other revisions and source archives without Git metadata are not accepted. It copies five bridge files and applies small, repeatable edits to the upstream build and Qt frontend. Build output stays under this repository's ignored `.native/` directory. See [the overlay contract](docs/overlay.md).
+The script validates commit `b6a54136e3fb519bfc25e32431801a6cf6992b3a` before patching. Use a dedicated Git checkout; other revisions and source archives without Git metadata are not accepted. It copies seven bridge files and applies small, repeatable edits to the upstream build and Qt frontend. Build output stays under this repository's ignored `.native/` directory. See [the overlay contract](docs/overlay.md).
 
 For convenience, omit `LYX_SOURCE_DIR` to download that checkout automatically. If Qt 5.15's `qmake` is on `PATH`, the build detects its installation prefix:
 
@@ -62,6 +65,8 @@ LYX_QT_PREFIX=/path/to/qt-5.15 npm run build:native
 ```
 
 Both paths apply the same overlay and do not replace your desktop LyX installation. You may combine `LYX_SOURCE_DIR` and `LYX_QT_PREFIX` in one command.
+
+The 2.5.3 source and executable live in versioned directories under `.native/`. Builds activate the new engine for newly opened document sessions; existing sessions continue running. To test before activation, use `LYX_NATIVE_ACTIVATE=0 npm run build:native` and select the resulting binary/library with `LYX_CODEX_BINARY` and `LYX_CODEX_LIBRARY`. See [upgrade details](docs/overlay.md). Opening a 2.4 document leaves its disk file unchanged; saving in 2.5.3 writes format 643.
 
 Generate this checkout's local plugin configuration and install it:
 
@@ -79,6 +84,14 @@ Open `demo/demo.lyx` in Codex, or ask Codex to open a local `.lyx` file through 
 
 If Codex has not loaded a newly installed plugin, save your work and restart the desktop app. Merely reopening the debugging browser does not connect it to chat. Existing native engines can retain older capabilities; resolve unsaved edits before closing or replacing them.
 
+## LaTeX pseudocode
+
+Choose **LaTeX Pseudocode** from the environment dropdown and press Enter. Edit the literal LaTeX source, then click outside the block or choose **Render LaTeX Pseudocode**. The native preview uses the same source as PDF export. Click the preview and its LaTeX box to edit again.
+
+The dropdown includes While, For, For All, If/Else, Repeat/Until, Function, Procedure, State, Return, Comment and Input/Output templates. Inside a source block they insert commands at the caret; outside they create a complete block. LaTeX controls indentation and numbering. New blocks use `algpseudocodex` with visible end statements; existing `algpseudocode` or `algpseudocodex` package settings are retained. TeX and the chosen package must be installed.
+
+See the six-page [PDF guide](demo/pseudocode-guide.pdf), [editable LyX examples](demo/pseudocode-demo.lyx), and [standalone LaTeX examples](demo/pseudocode-demo.tex). The [guide source](demo/pseudocode-guide/main.tex) is also included. Regenerate the sources with `node scripts/generate-pseudocode-demo.mjs`. Existing Enumerate content is not converted automatically. After rebuilding, open a fresh document session to use the new native commands.
+
 ## Development and verification
 
 ```sh
@@ -93,7 +106,7 @@ Unit/protocol tests require the web build but not the native build. Native integ
 
 `native/` is compiled into LyX. A local broker owns independent editing processes and authenticated sockets; the iframe receives no broker credentials. `server/mcp.mjs` provides file entry points and guarded read/edit tools. `web/native-app.mjs` displays native frames and forwards editing input. A separate HTML/KaTeX preview is retained for diagnostics.
 
-Native engines use a private copy of your LyX preferences, preserving fonts and key bindings. The bridge uses Qt's offscreen platform and Fusion styling. It is not a pixel-identical Cocoa window. Running document sessions are not automatically restarted by plugin updates.
+Native engines use a private copy of your LyX preferences, preserving fonts and key bindings. The copy prefers the macOS LyX 2.5 profile and falls back to 2.4; `LYX_USER_PROFILE` selects another profile. The plugin sets `\autosave 60` in that private profile to enable LyX's native one-minute recovery snapshots without changing desktop LyX preferences. The interval is set when a native window starts; existing windows retain their current timer. The bridge uses Qt's offscreen platform and Fusion styling. It is not a pixel-identical Cocoa window. Running document sessions are not automatically restarted by plugin updates.
 
 ## License
 

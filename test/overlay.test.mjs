@@ -15,7 +15,7 @@ test('the overlay refuses an unsupported upstream commit before writing any file
       '-c','commit.gpgsign=false','commit','-qm','Unsupported fixture revision']);
     const result=spawnSync(process.execPath,[resolve('scripts/patch-native.mjs'),directory],{encoding:'utf8'});
     assert.notEqual(result.status,0);
-    assert.match(result.stderr,/Only the pinned LyX 2\.4\.1 commit is supported/);
+    assert.match(result.stderr,/Only the pinned LyX 2\.5\.3 commit is supported/);
     assert.equal(await readFile(join(directory,'original.txt'),'utf8'),'Keep this upstream file unchanged.\n');
     assert.deepEqual((await readdir(directory)).sort(),['.git','original.txt']);
     assert.equal(execFileSync('git',['-C',directory,'status','--porcelain'],{encoding:'utf8'}),'');

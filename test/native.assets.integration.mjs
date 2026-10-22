@@ -22,7 +22,8 @@ test('native references, citations and relative graphics survive undo, save, reo
   const source=join(directory,'source'),relocated=join(directory,'relocated'),path=join(source,'demo.lyx');
   await mkdir(join(source,'assets'),{recursive:true});await mkdir(join(source,'references'));
   await copyFile('demo/demo.lyx',path);
-  const image=await readFile('.native/lyx-source/lib/doc/clipart/ToolbarEnvBox.png');
+  const library=process.env.LYX_CODEX_LIBRARY??JSON.parse(await readFile('.native/engine.json','utf8')).library;
+  const image=await readFile(join(library,'doc/clipart/ToolbarEnvBox.png'));
   await writeFile(join(source,'assets/native figure.png'),image);
   const bibliography='@article{native2026,\n  author={Alice Author and Bob Writer},\n  title={Native Citation Fixture},\n  journal={Integration Journal},\n  year={2026},\n  volume={1},\n  pages={1--2}\n}\n';
   await writeFile(join(source,'references/review.bib'),bibliography);

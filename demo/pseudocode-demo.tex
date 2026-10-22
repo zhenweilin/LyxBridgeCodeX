@@ -1,0 +1,61 @@
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,amsmath,amssymb,algorithm}
+\usepackage[noEnd=false]{algpseudocodex}
+\usepackage[margin=1in]{geometry}
+\title{LaTeX Pseudocode: Working Examples}
+\author{LyxBridgeCodeX}
+\date{}
+\begin{document}
+\maketitle
+The commands below are the same commands used in the editable LyX preview blocks.
+
+\begin{algorithm}[h]
+\caption{Nested While and For loops}\label{alg:loops}
+\begin{algorithmic}[1]
+\Require $x_0\in\mathbb{R}^n$, $K>0$, $\alpha>0$, $\varepsilon>0$
+\State $x\gets x_0$, $k\gets 0$
+\While{$\|g(x)\|>\varepsilon$ and $k<K$}
+  \For{$i=1,\ldots,n$}
+    \State $x_i\gets x_i-\alpha g_i(x)$
+  \EndFor
+  \State $k\gets k+1$
+\EndWhile
+\State \Return $x$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\caption{If, ElseIf, Else and Return}\label{alg:branches}
+\begin{algorithmic}[1]
+\Function{Clip}{$x,\ell,u$}
+  \If{$x<\ell$}
+    \State \Return $\ell$ \Comment{Lower bound}
+  \ElsIf{$x>u$}
+    \State \Return $u$ \Comment{Upper bound}
+  \Else
+    \State \Return $x$
+  \EndIf
+\EndFunction
+\State $z\gets\Call{Clip}{y,0,1}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\caption{Repeat, Procedure and ForAll}\label{alg:repeat}
+\begin{algorithmic}[1]
+\Procedure{Refine}{$x_0,\varepsilon$}
+  \State $x\gets x_0$
+  \Repeat
+    \State $x_{\mathrm{old}}\gets x$
+    \State $x\gets T(x)$ \Comment{One iteration}
+  \Until{$\|x-x_{\mathrm{old}}\|\leq\varepsilon$}
+  \State \Return $x$
+\EndProcedure
+\ForAll{$x_0\in S$}
+  \State \Call{Refine}{$x_0,\varepsilon$}
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\end{document}

@@ -46,6 +46,10 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPointer>
+#include <QProxyStyle>
+#include <QScreen>
+#include <QSet>
+#include <QSignalBlocker>
 #include <QScrollBar>
 #include <QSlider>
 #include <QTimer>
@@ -57,6 +61,8 @@
 #include <QTextDocumentFragment>
 #include <QTextCharFormat>
 #include <QWheelEvent>
+#include <qpa/qwindowsysteminterface.h>
+#include <private/qhighdpiscaling_p.h>
 #include <memory>
 #include <functional>
 #include <sstream>
@@ -64,6 +70,18 @@
 
 namespace lyx { namespace frontend {
 namespace {
+// Keep Qt's native menu scrolling and hit testing. Fusion otherwise folds a
+// long menu into columns, which can be wider than the embedded editor panel.
+class PanelMenuStyle : public QProxyStyle {
+public:
+    explicit PanelMenuStyle(QString const & base) : QProxyStyle(base) {}
+    int styleHint(StyleHint hint, QStyleOption const * option = nullptr,
+        QWidget const * widget = nullptr, QStyleHintReturn * data = nullptr) const override {
+        if (hint == SH_Menu_Scrollable) return 1;
+        return QProxyStyle::styleHint(hint, option, widget, data);
+    }
+};
+
 QJsonArray position(DocIterator const & it)
 {
     QJsonArray result;
@@ -76,10 +94,12 @@ QJsonArray position(DocIterator const & it)
 
 class CodexBridge : public QObject {
     GuiApplication * app_;
+    QPointer<QStyle> panelStyle_;
     QLocalServer server_;
     QHash<QString, QPointer<QWidget>> surfaces_;
     QPointer<QWidget> pressed_;
     bool contextPress_ = false;
+    bool textPreviewInitialized_ = false;
     int pendingInput_ = 0;
     QPointer<QWidget> compositionTarget_;
     QMetaObject::Connection compositionDestroyed_;
@@ -291,8 +311,8 @@ class CodexBridge : public QObject {
                 Point point;
                 Dimension dim;
                 area->bufferView().caretPosAndDim(point, dim);
-                rect = QRectF(point.x_ - area->bufferView().horizScrollOffset(),
-                    point.y_, qMax(1, dim.width()), dim.height());
+                rect = QRectF(point.x - area->bufferView().horizScrollOffset(),
+                    point.y, qMax(1, dim.width()), dim.height());
             }
         }
         if (!rect.isValid()) return result;
@@ -314,7 +334,7 @@ class CodexBridge : public QObject {
         };
         bool const lyxText = inputWorkArea(focus);
         auto index = [&text, lyxText](int offset) {
-            // Qt fields consume UTF-16 positions. LyX 2.4 paints a UCS-4
+            // Qt fields consume UTF-16 positions. LyX paints a UCS-4
             // preedit string and directly indexes it with these attributes.
             return lyxText ? text.left(offset).toUcs4().size() : offset;
         };
@@ -322,11 +342,21 @@ class CodexBridge : public QObject {
         QList<QInputMethodEvent::Attribute> attributes;
         attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Cursor,
             index(cursor), 1, QVariant()));
+        auto plainSegment = [&](int start, int end) {
+            if (!lyxText || end <= start) return;
+            QTextCharFormat format;
+            format.setFontUnderline(true);
+            attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::TextFormat,
+                index(start), index(end) - index(start), QVariant::fromValue(QTextFormat(format))));
+        };
+        bool highlighted = false;
         if (p["selection"].isObject()) {
             auto const selection = p["selection"].toObject();
             int const start = boundary(selection["start"].toInt());
             int const end = boundary(start + qBound(0, selection["length"].toInt(), text.size() - start));
             if (end > start) {
+                // LyX 2.5's segment parser requires contiguous coverage.
+                plainSegment(0, start);
                 QTextCharFormat format;
                 format.setFontUnderline(true);
                 format.setBackground(focus->palette().brush(QPalette::Highlight));
@@ -335,8 +365,11 @@ class CodexBridge : public QObject {
                 // Selection attribute, which moves the surrounding edit cursor.
                 attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::TextFormat,
                     index(start), index(end) - index(start), QVariant::fromValue(QTextFormat(format))));
+                plainSegment(end, text.size());
+                highlighted = true;
             }
         }
+        if (!highlighted) plainSegment(0, text.size());
         return attributes;
     }
     QJsonObject clipboardSelection(QJsonObject const & document) {
@@ -379,6 +412,15 @@ class CodexBridge : public QObject {
             return result;
         }
         auto & buffer = bv->buffer();
+        if (!textPreviewInitialized_) {
+            textPreviewInitialized_ = true;
+            // Also covers new engines launched by an already running broker.
+            // Keep native formula editing; only text Preview insets are enabled.
+            if (lyxrc.preview == LyXRC::PREVIEW_OFF) {
+                lyxrc.preview = LyXRC::PREVIEW_NO_MATH;
+                buffer.updatePreviews();
+            }
+        }
         buffer.checkExternalModification();
         auto & cursor = bv->cursor();
         QJsonObject result{{"ready", true}, {"path", toqstr(buffer.fileName().absFileName())},
@@ -635,18 +677,104 @@ class CodexBridge : public QObject {
         }
         return result;
     }
+    void reflowMenus() {
+        struct Popup {
+            QPointer<QMenu> menu;
+            QPointer<QMenu> parent;
+            QPointer<QAction> parentAction;
+            QPointer<QAction> active;
+            QPoint origin;
+        };
+        QList<Popup> popups;
+        for (auto * widget : QApplication::topLevelWidgets()) {
+            auto * menu = qobject_cast<QMenu *>(widget);
+            if (menu && menu->isVisible())
+                popups.append({menu, nullptr, nullptr, menu->activeAction(), menu->pos()});
+        }
+        // LyX gives submenu widgets the main window as QObject parent. Find
+        // the actual menu hierarchy through actions instead of parentWidget().
+        for (auto & popup : popups) {
+            for (auto const & candidate : popups) {
+                if (candidate.menu == popup.menu) continue;
+                for (auto * action : candidate.menu->actions()) {
+                    if (action->menu() == popup.menu) {
+                        popup.parent = candidate.menu;
+                        popup.parentAction = action;
+                    }
+                }
+            }
+        }
+        QSet<QMenu *> handled;
+        std::function<void(Popup const &)> reflow = [&](Popup const & popup) {
+            auto * menu = popup.menu.data();
+            if (!menu || handled.contains(menu)) return;
+            handled.insert(menu);
+            for (auto const & candidate : popups)
+                if (candidate.menu == popup.parent) reflow(candidate);
+            if (!popup.menu || !menu->isVisible()) return;
+            QPoint origin = popup.origin;
+            if (popup.parent && popup.parent->isVisible() && popup.parentAction) {
+                QRect const action = popup.parent->actionGeometry(popup.parentAction);
+                int const overlap = popup.parent->style()->pixelMetric(QStyle::PM_SubMenuOverlap,
+                    nullptr, popup.parent);
+                origin = popup.parent->mapToGlobal(QPoint(action.right() + overlap + 1, action.top()));
+            }
+            // Re-popup recalculates Qt's scroller flags, unlike resize(). Block
+            // aboutToShow: LyX otherwise rebuilds actions and deletes submenus.
+            // atAction keeps the highlighted item visible without hovering it
+            // again, which could open a submenu that the user had closed.
+            QSignalBlocker const blocked(menu);
+            menu->popup(origin, popup.active);
+        };
+        for (auto const & popup : popups) reflow(popup);
+    }
     QJsonObject frame(QJsonObject const & p) {
         QWidget * main = root();
         if (!main) return state(false);
         int width = qBound(480, p["width"].toInt(main->width()), 2560);
         int height = qBound(300, p["height"].toInt(main->height()), 1800);
         if (main->size() != QSize(width, height)) main->resize(width, height);
+        // The offscreen platform defaults to an unrelated 800 x 600 screen.
+        // Give Qt the actual panel bounds before it lays out any popup. This
+        // also initializes native menu scrollers correctly; clipping/resizing
+        // a captured menu image would leave some actions unreachable.
+        QRect const panel(main->mapToGlobal(QPoint()), main->size());
+        if (QApplication::platformName() == "offscreen") {
+            if (!panelStyle_ || QApplication::style() != panelStyle_) {
+                panelStyle_ = new PanelMenuStyle(QApplication::style()->objectName());
+                QApplication::setStyle(panelStyle_);
+            }
+            QScreen * screen = main->screen();
+            if (screen && (screen->geometry() != panel || screen->availableGeometry() != panel)) {
+                // QPA consumes native pixels but keeps screen origins unscaled.
+                QRect const nativePanel(panel.topLeft(), QHighDpi::toNativePixels(panel.size(), screen));
+                QWindowSystemInterface::handleScreenGeometryChange(screen, nativePanel, nativePanel);
+                QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents);
+                reflowMenus();
+            }
+        }
         surfaces_.clear();
         QJsonArray surfaces;
         QList<QWidget *> widgets{main};
         for (auto * w : QApplication::topLevelWidgets())
             if (w != main && w->isVisible() && !qobject_cast<GuiView *>(w)
                 && w->windowType() != Qt::ToolTip) widgets.append(w);
+        // Qt positions combo popups against the offscreen virtual screen,
+        // which is independent of the browser panel. A popup can otherwise
+        // begin above the rendered root (hiding Standard) or extend below it.
+        // Resize the real widget so native scrolling and pointer coordinates
+        // agree with the visible list, including after a panel resize.
+        for (auto * w : widgets) {
+            if (w == main) continue;
+            auto * combo = qobject_cast<QComboBox *>(w->parentWidget());
+            if (!combo || !combo->view() || combo->view()->window() != w) continue;
+            QSize const fitted(qMin(w->width(), panel.width()), qMin(w->height(), panel.height()));
+            if (w->size() != fitted) w->resize(fitted);
+            QPoint const origin = w->mapToGlobal(QPoint());
+            QPoint const bounded(qBound(panel.left(), origin.x(), panel.right() - w->width() + 1),
+                qBound(panel.top(), origin.y(), panel.bottom() - w->height() + 1));
+            if (origin != bounded) w->move(w->pos() + bounded - origin);
+        }
         // Paint the native root and transient windows separately, retaining their coordinates.
         QByteArray total;
         QHash<QString, CapturedSurface> nextImages;
