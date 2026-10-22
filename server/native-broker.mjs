@@ -8,7 +8,7 @@ import {NativeClipboardStore} from '../lib/native-clipboard.mjs';
 import {nativeRequestBytes,ordinaryNativeRequestBytes,imageNativeRequestBytes} from '../lib/native-rpc-limits.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 export const brokerFile = resolve(root, '.native/broker.json');
-const defaultPort = 43128;
+const defaultPort = 0;
 
 export async function startBroker({demoPath,port=defaultPort,registryPath=brokerFile} = {}) {
   const token = randomBytes(32).toString('hex');
@@ -116,10 +116,10 @@ export async function startBroker({demoPath,port=defaultPort,registryPath=broker
     await writeFile(registryPath, JSON.stringify({url, token, pid: process.pid}), {mode: 0o600});
     await chmod(registryPath, 0o600);
   }
-  return {server, open, sessions};
+  return {server, open, sessions, url};
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  await startBroker({demoPath: process.argv[2]});
-  console.log(`Native LyX editor: http://127.0.0.1:${defaultPort}/`);
+  const broker=await startBroker({demoPath: process.argv[2]});
+  console.log(`Native LyX editor: ${broker.url}/`);
 }

@@ -73,6 +73,8 @@ codex plugin add lyx-preview@lyxbridgecodex
 
 `lyx-preview` is the retained internal plugin identifier. The display name is **LyxBridgeCodeX**. Configuration records the current Node executable and checkout path in an ignored `.mcp.json`. Keep this checkout in place; after moving it or changing Node installations, rerun configuration and plugin installation. The GitHub repository is a source distribution, not a ready-to-run remote marketplace installation.
 
+Each checkout uses its own local broker on an available loopback port. A fresh clone can be installed while an older checkout still has open documents; those existing native processes retain their edits until you save and close them.
+
 Open `demo/demo.lyx` in Codex, or ask Codex to open a local `.lyx` file through the plugin. The footer should say **Connected to this chat**. Select content and use **add to chat**, then type your request in Codex and submit it normally. Save in LyX when you want changes written to disk. `npm run editor` opens a local debugging view without chat integration.
 
 If Codex has not loaded a newly installed plugin, save your work and restart the desktop app. Merely reopening the debugging browser does not connect it to chat. Existing native engines can retain older capabilities; resolve unsaved edits before closing or replacing them.

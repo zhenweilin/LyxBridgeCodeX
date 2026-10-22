@@ -20,7 +20,8 @@ Native text/formula editing, undo/redo, clipboard formulas, tables, citations, r
 - A successful edit enters native undo history but does not automatically save. After an uncertain tool result, read the document before retrying.
 - External disk changes use native reload and save-conflict behavior. They are not automatically merged into unsaved editor content.
 - The private preference-copy default follows the macOS LyX 2.4 profile location. `LYX_USER_PROFILE` can select another profile. Other operating systems are unverified.
-- A broker listens on loopback port 43128 and authenticates requests. Existing sessions are intentionally preserved across frontend updates. Resolve unsaved work before stopping a broker or native process.
+- Each checkout starts an authenticated broker on an available loopback port and records its address in its private `.native/broker.json`. Older brokers on port 43128 remain discoverable. Separate checkouts can run together without replacing existing sessions. Resolve unsaved work before stopping a broker or native process.
+- Broker startup is serialized per checkout. If a process crashes during startup, the next attempt reports an interrupted startup and identifies `.native/broker-start.lock`. Remove that stale file only after the error confirms its owner has exited, then retry. A lock owned by a live process is never automatically removed.
 
 ## Reporting a problem
 
