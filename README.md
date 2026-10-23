@@ -12,7 +12,7 @@ Native LyX editing inside Codex, with editable formulas and document context sha
 - Choose paragraph environments in a list that fits the editor panel; scroll to all entries, including Standard, and confirm with Enter.
 - Open native menus within the editor panel, with scrolling for long menus and working submenus in narrow panels.
 - Copy and paste native LyX content while retaining editable formulas.
-- Select text or a formula and click **add to chat** to attach context to the next message. It inserts no text into the composer and does not send a message.
+- Select text or a formula and click **add to chat** to attach context to the next message. The attachment shows the filename and selected passage once, with only the required edit target in structured metadata. It inserts no text into the composer and does not send a message.
 - Ask Codex to polish the attached passage directly. The saved selection survives cursor movement, checks for intervening document changes, and applies as one undoable edit without saving.
 
 The interface is English. Document language is independent of interface language. Each selection update replaces the previous context for that panel; it is not a growing collection of selections.

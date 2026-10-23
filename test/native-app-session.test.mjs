@@ -263,7 +263,7 @@ test('add to chat keeps the clicked document and native session while another fi
   assert.equal(calls.find(call=>call.method==='selection').sessionId,'A');
   assert.equal(ui.contexts[0].structuredContent.file,'/A.lyx');
   assert.equal(ui.contexts[0].structuredContent.sessionId,'A');
-  assert.equal(ui.contexts[0].structuredContent.text,'Passage A');
+  assert.equal(ui.contexts[0].content[0].text,'LyX selection · A.lyx\n\nPassage A');
   assert.equal(ui.drafts.length,0,'Adding context must not write to the composer or send a message');
 });
 
@@ -293,7 +293,7 @@ test('a rebuilt panel and native engine behind an old MCP service do not adverti
   ui.attach('A');await ui.paint();await ui.get('add').dispatch('click');
   assert.equal(ui.contexts[0].structuredContent.snapshotId,undefined);
   assert.equal(ui.contexts[0].structuredContent.editingSupported,true);
-  assert.equal(ui.contexts[0].structuredContent.clipboardSelection.text,'Passage');
+  assert.equal(ui.contexts[0].content[0].text,'LyX selection · A.lyx\n\nPassage');
   assert.doesNotMatch(ui.contexts[0].content[0].text,/replace_native_lyx_snapshot/);
   assert.doesNotMatch(ui.get('notice').textContent,/move the cursor/);
   assert.equal(ui.get('add').dataset.contextAttached,'true');

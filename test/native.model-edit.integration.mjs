@@ -145,7 +145,19 @@ test('real stdio model tools safely edit an isolated native buffer, preserve uns
       assert.deepEqual(unchanged.clipboardSelection,before.clipboardSelection);
     }
 
-    const changed=await replace(before,{format:'text',text:'Updated MCP selected text\nSecond line 中文'});
+    // The terse legacy attachment must still carry everything needed for a
+    // guarded write, without copying the passage into structured metadata.
+    let legacyContext;
+    await addNativeSelectionToChat(before,{modelContext:{update:async value=>{
+      legacyContext=value;return {updateId:'legacy-native-integration'};
+    }}},{sessionId});
+    const legacyMetadata=legacyContext.structuredContent;
+    const legacyText=legacyContext.content[0].text.split('\n\n').slice(1).join('\n\n');
+    assert.equal(legacyText,before.selection);
+    assert.equal(legacyMetadata.text,undefined);
+    const changed=await replace({path:legacyMetadata.file,sourceRevision:legacyMetadata.bufferRevision,
+      clipboardSelection:{kind:'document',hasSelection:true,text:legacyText,...legacyMetadata.range}},
+      {format:'text',text:'Updated MCP selected text\nSecond line 中文'});
     assert.match(changed.source,/Unsaved user context survives model editing/);
     assert.doesNotMatch(changed.source,/Original MCP selected text/);
     assert.match(changed.source,/Updated MCP selected text/);
