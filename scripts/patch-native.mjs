@@ -11,7 +11,7 @@ const commit=execFileSync('git',['-C',source,'rev-parse','HEAD'],{encoding:'utf8
 if(commit!==lyxUpstream.commit)throw new Error(`Only the pinned LyX ${lyxUpstream.version} commit is supported.`);
 await patchSourceLabels(root,source);
 const qt = resolve(source, 'src/frontends/qt');
-for (const file of ['CodexBridge.h', 'CodexBridge.cpp','CodexFramePng.h','CodexPanelStyle.h','CodexSelectionEdit.h','CodexSelectionEdit.cpp','CodexPseudocode.h','CodexPseudocode.cpp']) await copyFile(resolve(root, 'native', file), resolve(qt, file));
+for (const file of ['CodexBridge.h', 'CodexBridge.cpp','CodexFramePng.h','CodexPanelStyle.h','CodexSelectionEdit.h','CodexSelectionEdit.cpp','CodexReview.h','CodexReview.cpp','CodexPseudocode.h','CodexPseudocode.cpp','CodexColorToolbar.h','CodexColorToolbar.cpp']) await copyFile(resolve(root, 'native', file), resolve(qt, file));
 let cpp = await readFile(resolve(qt, 'GuiApplication.cpp'), 'utf8');
 if (!cpp.includes('#include "CodexBridge.h"')) cpp = '#include "CodexBridge.h"\n' + cpp;
 if (!cpp.includes('#include "CodexPseudocode.h"')) cpp = '#include "CodexPseudocode.h"\n' + cpp;

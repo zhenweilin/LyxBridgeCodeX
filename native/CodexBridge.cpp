@@ -5,6 +5,8 @@
 #include "CodexFramePng.h"
 #include "CodexPanelStyle.h"
 #include "CodexSelectionEdit.h"
+#include "CodexReview.h"
+#include "CodexColorToolbar.h"
 #include "GuiApplication.h"
 #include "GuiView.h"
 #include "GuiWorkArea.h"
@@ -62,6 +64,7 @@
 #include <QTextDocument>
 #include <QTextDocumentFragment>
 #include <QTextCharFormat>
+#include <QToolBar>
 #include <QWheelEvent>
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qhighdpiscaling_p.h>
@@ -388,6 +391,7 @@ class CodexBridge : public QObject {
             {"end", document["selectionEnd"]}};
     }
     QJsonObject state(bool includeSource) {
+        ensureCodexColorToolbar(app_);
         auto * bv = bufferView();
         if (!bv) {
             auto * main = root();
@@ -448,13 +452,18 @@ class CodexBridge : public QObject {
             {"selection", cursor.selection() ? toqstr(cursor.selectionAsString(true)) : QString()}};
         result["clipboardSelection"] = clipboardSelection(result);
         result["inputMethod"] = inputMethodState();
+        result["review"] = codexReviewState(buffer, includeSource);
+        QJsonObject capabilities = result["capabilities"].toObject();
+        capabilities["review"] = true; capabilities["trackedReplacement"] = true;
+        result["capabilities"] = capabilities;
         if (!menuClipboard_.isEmpty()) result["menuClipboard"] = menuClipboard_;
         if (includeSource) {
             std::ostringstream source;
             buffer.write(source);
-            result["source"] = QString::fromUtf8(source.str().c_str());
+            QByteArray const bytes = QByteArray::fromStdString(source.str());
+            result["source"] = QString::fromUtf8(bytes);
             result["sourceRevision"] = QString::fromLatin1(QCryptographicHash::hash(
-                QByteArray::fromStdString(source.str()), QCryptographicHash::Sha256).toHex());
+                bytes, QCryptographicHash::Sha256).toHex());
             QFile disk(toqstr(buffer.fileName().absFileName()));
             if (disk.open(QIODevice::ReadOnly))
                 result["diskRevision"] = QString::fromLatin1(QCryptographicHash::hash(disk.readAll(), QCryptographicHash::Sha256).toHex());
@@ -1232,9 +1241,32 @@ class CodexBridge : public QObject {
                 if (compositionActive_ || pendingInput_ > 0)
                     return {{"error", true}, {"code", "input_pending"},
                         {"message", "Finish the current input before sharing a selection"}};
-                return captureCodexSelection(app_);
+                QJsonObject result = captureCodexSelection(app_);
+                if (!p["compact"].toBool() || result["error"].toBool()) return result;
+                QJsonObject compact;
+                for (char const * key : {"ready", "path", "modified", "sourceRevision", "clipboardSelection",
+                    "snapshotId", "snapshotTtlSeconds", "selectionFormat", "plainTextSelection", "capabilities"})
+                    if (result.contains(key)) compact[key] = result[key];
+                return compact;
             }
             QJsonObject result = state(true);
+            if (p["includeControls"].toBool() && root()) {
+                QJsonArray controls;
+                for (auto * toolbar : root()->findChildren<QToolBar *>()) {
+                    QJsonArray actions;
+                    for (auto * action : toolbar->actions()) {
+                        auto * widget = toolbar->widgetForAction(action);
+                        if (!widget) continue;
+                        QRect const r = QRect(widget->mapTo(root(), QPoint()), widget->size());
+                        actions.append(QJsonObject{{"name", widget->objectName()}, {"text", action->text()},
+                            {"visible", widget->isVisible()}, {"hidden", widget->isHidden()},
+                            {"x", r.x()}, {"y", r.y()}, {"width", r.width()}, {"height", r.height()}});
+                    }
+                    controls.append(QJsonObject{{"name", toolbar->objectName()}, {"visible", toolbar->isVisible()},
+                        {"width", toolbar->width()}, {"height", toolbar->height()}, {"actions", actions}});
+                }
+                result["controls"] = controls;
+            }
             if (p["includeReferences"].toBool()) {
                 auto * window = app_->currentView();
                 auto * view = window ? window->documentBufferView() : nullptr;
@@ -1254,11 +1286,15 @@ class CodexBridge : public QObject {
         }
         if (method == "state") return state(false);
         if (method == "clipboard") {
-            if (p["action"] == "replace-selection" || p["action"] == "replace-snapshot") {
+            if (p["action"] == "replace-selection" || p["action"] == "replace-snapshot"
+                || p["action"] == "apply-color" || p["action"] == "color-target" || p["action"] == "review") {
                 if (compositionActive_) return {{"error", true}, {"applied", false},
                     {"code", "input_pending"}, {"message", "Finish or cancel the active input-method composition before editing"}};
                 if (pendingInput_ > 0) return {{"error", true}, {"applied", false},
                     {"code", "input_pending"}, {"message", "Native input is still pending; read the document again before editing"}};
+                if (p["action"] == "review") return reviewCodexDocument(app_, p);
+                if (p["action"] == "color-target") return captureCodexColorTarget(app_);
+                if (p["action"] == "apply-color") return applyCodexColor(app_, p);
                 return p["action"] == "replace-snapshot" ? editCodexSnapshot(app_, p) : editCodexSelection(app_, p);
             }
             return clipboard(p);

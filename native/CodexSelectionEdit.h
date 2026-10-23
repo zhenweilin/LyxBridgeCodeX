@@ -11,5 +11,12 @@ QJsonObject editCodexSelection(GuiApplication * app, QJsonObject const & params)
 // Compact, session-local targets survive cursor movement, never document edits.
 QJsonObject captureCodexSelection(GuiApplication * app);
 QJsonObject editCodexSnapshot(GuiApplication * app, QJsonObject const & params);
+QJsonObject captureCodexColorTarget(GuiApplication * app);
+QJsonObject applyCodexColor(GuiApplication * app, QJsonObject const & params);
+}}
+namespace lyx {
+class BufferView;
+namespace frontend {
+QJsonObject codexDocumentSnapshot(BufferView & view);
 }}
 #endif

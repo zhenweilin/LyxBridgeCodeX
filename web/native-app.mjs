@@ -10,6 +10,7 @@ import {nativeImePosition} from './native-ime-position.mjs';
 import {createNativeIme} from './native-ime.mjs';
 import {normalizeNativeWheel,nativeWheelQueueOptions} from './native-wheel.mjs';
 import {nativeViewportSize,fitNativeViewport} from './native-viewport.mjs';
+import {createNativeReview,addNativeCommentsToChat} from './native-review.mjs';
 const $ = id => document.getElementById(id);
 let descriptor, state, app, extensions, frameSerial = -1, pollPromise, composing = false, scale = 1, attachmentSerial=0;
 let inputQueue = Promise.resolve(), noticeTimer;
@@ -150,6 +151,7 @@ function showState(next) {
   if(sessionExited()){renderConnection();return;}
   const wasReady=state?.ready;
   state = next;
+  review.update(next,`${attachmentSerial}:${next.path??''}`);
   nativeMenuClipboard.update(next);
   if(!next.ready){
     if(wasReady)nativeMenuClipboard.invalidateGesture();
@@ -265,6 +267,7 @@ function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParam
     }
   }).finally(()=>{
     if(changesSelection)pendingEdits--;
+    review.refresh();
     // The input acknowledgement precedes Qt's edit; also wake after the state
     // barrier so the last drag position is painted when interaction stops.
     frameLoop.request();
@@ -324,6 +327,41 @@ async function pollFrame() {
 // Request the next active frame promptly. The loop still allows only one
 // frame in flight, so a slower host/encoder cannot build a frame backlog.
 const frameLoop=createNativeFrameLoop({draw:poll,isVisible:()=>!document.hidden,activeInterval:16});
+function reviewTask(work,{observational=false}={}){
+  const target=descriptor,path=state?.path;
+  if(!target || connectionPhase==='error' || sessionExited(target))return Promise.reject(new Error('Open a native document first.'));
+  if(!observational){pendingEdits++;editGeneration++;selectionClipboard=undefined;clipboardKey=undefined;}
+  const task=nativeInputs.enqueue(async()=>{
+    const next=await rpc('selection',{},target);
+    if(next.path!==path)throw new Error('The active document changed. Refresh review first.');
+    const result=await work(next,target);
+    if(!observational && descriptor===target && result?.ready)showState(result);
+    return result;
+  });
+  // The sidebar renders its own read result. A passive query must not evict
+  // the selection clipboard or turn the idle frame loop into an activity burst.
+  inputQueue=task.catch(()=>{}).finally(()=>{if(!observational){pendingEdits--;frameLoop.request();}});
+  return task;
+}
+const review=createNativeReview({
+  read:()=>reviewTask(next=>next,{observational:true}),
+  run:(operation,params={},expected)=>{
+    // An add-comment draft retains the original revision and selection. For
+    // review controls capture the visible selection before entering the queue.
+    const origin=expected??{path:state?.path,clipboardSelection:clipboardSelection(state)};
+    return reviewTask((next,target)=>{
+      if(origin.path!==next.path)throw new Error('The active document changed. Refresh review first.');
+      return rpc('clipboard',{action:'review',operation,...params,path:origin.path,
+        sourceRevision:expected?.sourceRevision??next.sourceRevision,selection:origin.clipboardSelection},target);
+    });
+  },
+  attach:ids=>reviewTask((next,target)=>addNativeCommentsToChat(next,ids,extensions,{sessionId:target.sessionId})),
+  available:()=>!!extensions?.modelContext,
+  changed:()=>frameLoop.request(),focus:()=>$('input').focus({preventScroll:true}),notice,
+});
+// Model edits can arrive independently of the browser's input queue.
+const reviewTimer=setInterval(()=>{if(connectionPhase==='connected' && !document.hidden && !pendingEdits && !composing && !state?.inputMethod?.composing)review.refresh();},2000);
+reviewTimer?.unref?.();
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){pointerDrag.cancel('hidden');ime.cancel();}else frameLoop.request();
 });
@@ -343,6 +381,7 @@ function attach(value) {
   pointerDrag.cancel('attachment');ime.cancel();pendingHover=undefined;
   nativeMenuClipboard?.destroy();
   descriptor={...value};attachmentSerial++;state=undefined;frameSerial=-1;
+  review.update({ready:false},`${attachmentSerial}:`);
   documentOpened=false;
   connectionPhase='connecting';retryBusy=false;reopenBusy=false;renderConnection();
   failedCancellations.clear();
@@ -562,7 +601,10 @@ if(standalone){
   if(window.__LYX_NATIVE__)attach(window.__LYX_NATIVE__);
   else notice('Open a .lyx file through the plugin, or start the native editor with a test file.');
 }else{
-  app=new App({name:'LyX Native Editor',version:'0.3.0'});
+  // This editor fills the host viewport. The SDK's content-height observer
+  // temporarily measures html at max-content, including the native frame;
+  // feeding that height back to the host can repeatedly resize its scrollbar.
+  app=new App({name:'LyX Native Editor',version:'0.3.0'},{},{autoResize:false});
   extensions=new OpenAIExtensions(app);
   let connected=false,needsFileOpen=false,opening;
   function waitingForFile(){

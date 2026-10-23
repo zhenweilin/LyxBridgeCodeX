@@ -14,8 +14,10 @@ Native LyX editing inside Codex, with editable formulas and document context sha
 - Copy and paste native LyX content while retaining editable formulas.
 - Select text or a formula and click **add to chat** to attach context to the next message. The attachment shows the filename and selected passage once, with only the required edit target in structured metadata. It inserts no text into the composer and does not send a message.
 - Ask Codex to polish the attached passage directly. The saved selection survives cursor movement, checks for intervening document changes, and applies as one undoable edit without saving.
+- Review AI edits as native insertions/deletions and accept or reject them. Formula revisions keep complete editable old and new formulas.
+- Annotate several passages in **Review**, then attach the checked comments together with **add comments to chat**. Comments are native LyX notes and survive Save and reopening.
 
-The interface is English. Document language is independent of interface language. Each selection update replaces the previous context for that panel; it is not a growing collection of selections.
+The interface is English. Document language is independent of interface language. Each selection or comment-batch update replaces the previous context for that panel. To share multiple locations together, use a checked comment batch. See [revisions and comments](docs/native-review.md).
 
 ## Tested versions
 
@@ -50,7 +52,7 @@ git clone --branch 2.5.3 --depth 1 https://codeberg.org/LyX-org/lyx.git ../lyx-2
 LYX_SOURCE_DIR="$(cd ../lyx-2.5.3 && pwd)" npm run build:native
 ```
 
-The script validates commit `b6a54136e3fb519bfc25e32431801a6cf6992b3a` before patching. Use a dedicated Git checkout; other revisions and source archives without Git metadata are not accepted. It copies eight bridge files and applies small, repeatable edits to the upstream build and Qt frontend. Build output stays under this repository's ignored `.native/` directory. See [the overlay contract](docs/overlay.md).
+The script validates commit `b6a54136e3fb519bfc25e32431801a6cf6992b3a` before patching. Use a dedicated Git checkout; other revisions and source archives without Git metadata are not accepted. It copies the bridge files and applies small, repeatable edits to the upstream build and Qt frontend. Build output stays under this repository's ignored `.native/` directory. See [the overlay contract](docs/overlay.md).
 
 For convenience, omit `LYX_SOURCE_DIR` to download that checkout automatically. If Qt 5.15's `qmake` is on `PATH`, the build detects its installation prefix:
 
@@ -90,6 +92,12 @@ If Codex has not loaded a newly installed plugin, save your work and restart the
 
 Updating a running source checkout also requires attention to its separate background services: a rebuilt panel can load while an older MCP service or broker is still running. Plugin reinstallation or a Codex restart does not by itself prove that every layer updated. See [updating a running checkout](docs/compatibility.md#updating-a-running-checkout) before closing sessions that may contain unsaved work.
 
+## Font colors
+
+The native toolbar has an **A ▾** button next to the environment dropdown. Select text or part of a formula, open the arrow, and choose a swatch. Clicking **A** reapplies the last color. The palette includes common colors, six recent colors, **More colors…** (including an HTML/hex field), and **Default color**. Use the arrow keys to move between swatches, Enter to apply, and Esc or an outside click to dismiss. Opening the palette retains the document selection.
+
+Colors use native LyX formatting and remain editable, undoable, and portable to PDF. Custom definitions and the formatting change undo together. Default color preserves other font properties. For math, select within one cell; recoloring replaces selected color wrappers while preserving the formula. Inside raw LaTeX/ERT, use LaTeX color commands instead; the toolbar is disabled there. Open a fresh native editor session after rebuilding to load the toolbar.
+
 ## LaTeX pseudocode
 
 Choose **LaTeX Pseudocode** from the environment dropdown and press Enter. Edit the literal LaTeX source, then click outside the block or choose **Render LaTeX Pseudocode**. The native preview uses the same source as PDF export. Click the preview and its LaTeX box to edit again.
@@ -99,6 +107,14 @@ The dropdown includes While, For, For All, If/Else, Repeat/Until, Function, Proc
 Literal `\label{line:update}` commands in raw LaTeX now appear in LyX's Cross-Reference dialog. Insert a standard native reference and use Go to Label to return to its source. The index refreshes on editing and undo without inserting extra labels or changing exported code. Final numbers come from LaTeX; the editor shows source label names. Comments, verbatim examples, and common macro definitions are excluded. Macro expansion, external TeX files, and arbitrary TeX conditionals are not evaluated; source renames do not rewrite existing references.
 
 See the [PDF guide](demo/pseudocode-guide.pdf), [editable LyX examples](demo/pseudocode-demo.lyx), and [standalone LaTeX examples](demo/pseudocode-demo.tex). The [guide source](demo/pseudocode-guide/main.tex) includes a line-label example. Regenerate all sources with `node scripts/generate-pseudocode-demo.mjs`, or only the guide with `--guide-only`. Existing Enumerate content is not converted automatically. After rebuilding, open a fresh document session to use the new native commands.
+
+## Command-line editing
+
+`node scripts/lyxctl.mjs --help` exposes compact selection reads, guarded text/math
+replacement, review operations, and exact text edits merged into one undo step.
+Use `serve` for a persistent JSONL worker when performing multiple operations.
+The CLI shares the MCP editing implementation and preserves native revisions and
+unsaved buffers. See [CLI usage and measured performance](docs/edit-performance.md).
 
 ## Development and verification
 

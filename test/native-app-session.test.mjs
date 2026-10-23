@@ -11,7 +11,7 @@ const bundle=await build({entryPoints:['web/native-app.mjs'],bundle:true,write:f
     builder.onResolve({filter:/^(@modelcontextprotocol\/ext-apps|@openai\/mcp-extensions\/app)$/},args=>({path:args.path,namespace:'test-host'}));
     builder.onLoad({filter:/.*/,namespace:'test-host'},()=>({contents:`
       export class App {
-        constructor(){ __host.app=this; }
+        constructor(info,capabilities,options){ __host.app=this; __host.appOptions=options; }
         addEventListener(type,callback){ __host.listeners.set(type,callback); }
         async connect(){ await __host.connect(); }
         callServerTool(request){ return __host.call(request); }
@@ -24,7 +24,7 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
 
 function element(){
   const listeners=new Map(),pointers=new Set();
-  return {style:{},dataset:{},children:[],value:'',scrollLeft:0,scrollTop:0,
+  return {style:{},dataset:{},children:[],hidden:true,value:'',scrollLeft:0,scrollTop:0,
     addEventListener(type,callback){listeners.set(type,[...(listeners.get(type)??[]),callback]);},
     dispatch(type,extra={}){return Promise.all((listeners.get(type)??[]).map(callback=>callback({type,target:this,preventDefault(){},...extra})));},
     setAttribute(){},append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},remove(){},focus(){},
@@ -41,7 +41,7 @@ function state(sessionId){return {ready:true,path:`/${sessionId}.lyx`,modified:f
 
 async function harness(call,{connect=async()=>{},open=async()=>({}),reopen=async()=>({}),standaloneDescriptor,fetch}={}){
   const nodes=new Map(),get=id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);};
-  const document={hidden:false,body:element(),getElementById:get,createElement:element,querySelector:element,
+  const document={hidden:false,body:element(),getElementById:get,createElement:element,createTextNode:text=>({textContent:text}),querySelector:element,
     addEventListener(){},removeEventListener(){}};
   const contexts=[],drafts=[];
   const host={connect,listeners:new Map(),call:async request=>{
@@ -52,10 +52,11 @@ async function harness(call,{connect=async()=>{},open=async()=>({}),reopen=async
   },extensions:{
     modelContext:{async update(context){contexts.push(context);return {updateId:'accepted'};}},
     message:{async send(draft){drafts.push(draft);return {};}}}};
-  const timers=new Map();let timerId=0,clock=0;
+  const timers=new Map(),intervals=[];let timerId=0,clock=0;
   const window={parent:{},addEventListener(){}};
   if(standaloneDescriptor){window.parent=window;window.__LYX_NATIVE__=standaloneDescriptor;}
   await vm.runInNewContext(`(async()=>{${bundle.outputFiles[0].text}\n})()`,{__host:host,document,window,fetch,
+    setInterval:callback=>{intervals.push(callback);return 0;},
     crypto:webcrypto,TextEncoder,TextDecoder,atob,btoa,Image:element,performance:{now:()=>clock},
     setTimeout:(callback,delay=0)=>{timers.set(++timerId,{callback,at:clock+delay});return timerId;},clearTimeout:id=>timers.delete(id)});
   await flush();
@@ -65,10 +66,87 @@ async function harness(call,{connect=async()=>{},open=async()=>({}),reopen=async
     timers.delete(id);clock=timer.at;timer.callback();await flush();};
   const wheel=async(deltaY=1)=>get('surfaces').dispatch('wheel',{deltaMode:0,deltaX:0,deltaY,clientX:200,clientY:200,
     target:{closest:()=>({dataset:{surface:'main'},getBoundingClientRect:()=>({left:0,top:0})})}});
-  return {get,attach,commit,contexts,drafts,flush,paint,wheel,
+  return {get,attach,commit,contexts,drafts,flush,paint,wheel,intervals,time:()=>clock,appOptions:host.appOptions,
     result:value=>host.app.ontoolresult(value),
     toolinput:args=>host.listeners.get('toolinput')?.({arguments:args})};
 }
+
+test('viewport-sized editor leaves host height control with the host',async()=>{
+  const ui=await harness(async request=>state(request.sessionId));
+  assert.equal(ui.appOptions.autoResize,false,'Content-height reporting would feed native frame height back into the host');
+});
+
+test('background review refresh leaves enabled controls, cards and scroll position stable',async()=>{
+  const gate=deferred();let delayed=false,reads=0;
+  const comment={id:'first',quote:'Passage',text:'Comment',resolved:false,anchor:[]};
+  const ui=await harness(async request=>{
+    if(request.method==='selection'){reads++;if(delayed)await gate.promise;}
+    return {...state(request.sessionId),sourceRevision:'revision',capabilities:{review:true},
+      review:{comments:[comment],tracking:false}};
+  });
+  ui.attach('A');await ui.paint();ui.get('review-toggle').onclick();await flush();
+  const controls=['next','previous','accept','reject','new','refresh','attach'].map(name=>ui.get(`review-${name}`));
+  const disabled=controls.map(node=>node.disabled);
+  const card=ui.get('review-comments').children[0];
+  ui.get('review-panel').scrollTop=180;
+  ui.get('review-error').textContent='Keep this action error until the next action.';
+  const changes=[];
+  for(const node of controls){let value=node.disabled;Object.defineProperty(node,'disabled',{
+    get:()=>value,set:next=>{changes.push(next);value=next;},configurable:true});}
+  delayed=true;const beforeReads=reads;
+  for(const callback of ui.intervals)callback();await flush();
+  for(const callback of ui.intervals)callback();await flush();
+  assert.equal(reads,beforeReads+1,'Only one background refresh may be in flight');
+  assert.deepEqual(controls.map(node=>node.disabled),disabled,'Slow polling does not disable the review controls');
+  gate.resolve();await flush();await flush();
+  assert.deepEqual(changes,[],'Unchanged frame/read state never toggles disabled attributes');
+  assert.equal(ui.get('review-comments').children[0],card);
+  assert.equal(ui.get('review-panel').scrollTop,180);
+  assert.equal(ui.get('review-error').textContent,'Keep this action error until the next action.');
+});
+
+test('background review queries preserve the idle frame cadence and prepared clipboard',async()=>{
+  let copies=0;
+  const ui=await harness(async request=>{
+    if(request.method==='clipboard'){copies++;return {clipboard:{text:'Selected passage'}};}
+    return {...state(request.sessionId),sourceRevision:'revision',hasSelection:true,selection:'Selected passage',
+      clipboardSelection:{kind:'document',hasSelection:true,text:'Selected passage',start:[],end:[]},
+      capabilities:{review:true},review:{comments:[],tracking:false}};
+  });
+  ui.attach('A');await ui.paint();ui.get('review-toggle').onclick();await flush();
+  while(ui.time()<1000)await ui.paint();
+  const previousTime=ui.time(),previousCopies=copies;
+  assert.ok(previousCopies>0,'A native selection was prepared for copying');
+  for(const callback of ui.intervals)callback();await flush();await flush();
+  await ui.paint();
+  assert.equal(ui.time()-previousTime,250,'A read does not activate the 16 ms frame loop');
+  assert.equal(copies,previousCopies,'A read does not discard and refetch the selection clipboard');
+});
+
+test('the real sidebar attaches checked native comments together and resets on a document switch',async()=>{
+  const comments=[{id:'first',quote:'First passage',text:'Add a citation.',resolved:false,anchor:[]},
+    {id:'second',quote:'Second passage',text:'Explain the assumptions.',resolved:false,anchor:[]}];
+  const ui=await harness(async request=>({...state(request.sessionId),sourceRevision:'current-revision',
+    capabilities:{review:true},review:{comments:request.sessionId==='A'?comments:[],tracking:false}}));
+  ui.attach('A');await ui.paint();
+  ui.get('review-toggle').onclick();await flush();
+  assert.equal(ui.get('review-comments').children.length,2);
+  assert.equal(ui.get('review-attach').disabled,false);
+  await ui.get('review-attach').onclick();
+  assert.equal(ui.contexts.length,1);
+  assert.deepEqual(JSON.parse(JSON.stringify(ui.contexts[0].structuredContent.comments)),comments);
+  assert.equal(ui.contexts[0].structuredContent.sessionId,'A');
+  assert.equal(ui.contexts[0].structuredContent.sourceRevision,'current-revision');
+  assert.equal(ui.drafts.length,0,'Attaching annotations never sends a chat message');
+  const checkbox=ui.get('review-comments').children[0].children[0].children[0];
+  checkbox.checked=false;await checkbox.dispatch('change');
+  await ui.get('review-attach').onclick();
+  assert.deepEqual(JSON.parse(JSON.stringify(ui.contexts[1].structuredContent.comments)),[comments[1]]);
+  ui.attach('B');await ui.paint();
+  assert.equal(ui.get('review-comments').children.length,0);
+  assert.equal(ui.get('review-attach').disabled,true);
+  assert.equal(ui.get('review-attach').dataset.contextUpdateId,undefined);
+});
 
 test('the real frontend coalesces slow wheel RPCs without crossing typing, chat or session barriers',async()=>{
   const gate=deferred(),calls=[];let block=true;

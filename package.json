@@ -12,7 +12,9 @@
     "editor": "node server/native-broker.mjs demo/demo.lyx",
     "test:native": "node --test --test-concurrency=1 test/native*.integration.mjs",
     "configure": "node scripts/configure-plugin.mjs",
-    "package:release": "node scripts/package-release.mjs"
+    "package:release": "node scripts/package-release.mjs",
+    "cli": "node scripts/lyxctl.mjs",
+    "benchmark:edits": "node scripts/benchmark-edits.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",
@@ -33,5 +35,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "bin": {
+    "lyxctl": "scripts/lyxctl.mjs"
   }
 }

@@ -20,7 +20,7 @@ function snapshot(overrides={}){
   };
 }
 function args(overrides={}){
-  return {sessionId,path,sourceRevision:hash(source),selection:structuredClone(selected),replacement:{format:'text',text:'Replacement'},...overrides};
+  return {sessionId,path,sourceRevision:hash(source),selection:structuredClone(selected),replacement:{format:'text',text:'Replacement'},trackChanges:false,...overrides};
 }
 async function connect(t,rpc){
   // Exercise real MCP serialization/schema validation, but inject the only
@@ -38,7 +38,7 @@ const replace=(client,arguments_=args())=>client.callTool({name:'replace_native_
 const targetId='94967851-1772-4cb8-a958-002606a48fab';
 const compactRead=client=>client.callTool({name:'read_native_lyx_selection',arguments:{sessionId}});
 const compactWrite=(client,extra={})=>client.callTool({name:'replace_native_lyx_snapshot',arguments:{
-  sessionId,snapshotId:targetId,replacement:{format:'text',text:'Replacement'},...extra}});
+  sessionId,snapshotId:targetId,replacement:{format:'text',text:'Replacement'},trackChanges:false,...extra}});
 const receipt=()=>({applied:true,path,modified:true,sourceRevision:hash('after'),previousSourceRevision:hash(source),
   snapshotId:targetId,replayed:false});
 function data(result){
@@ -53,7 +53,7 @@ test('compact selection captures once without full source, transport metadata or
   });});
   const result=await compactRead(client);
   assert.ok(!result.isError);
-  assert.deepEqual(calls,[{sessionId,method:'selection',params:{captureEdit:true}}]);
+  assert.deepEqual(calls,[{sessionId,method:'selection',params:{captureEdit:true,compact:true}}]);
   assert.deepEqual(data(result),{sessionId,path,modified:true,sourceRevision:hash(source),selection:selected,
     snapshotId:targetId,snapshotTtlSeconds:1800,selectionFormat:'text',editingSupported:true});
   assert.ok(!JSON.stringify(result).includes('private-secret'));
@@ -63,6 +63,35 @@ test('compact selection captures once without full source, transport metadata or
 test('compact read of a legacy engine remains available without advertising a saved edit target',async t=>{
   const client=await connect(t,async()=>snapshot());
   assert.equal(data(await compactRead(client)).editingSupported,false);
+});
+
+test('a verified compact capture eliminates the tracked edit capability round trip',async t=>{
+  const calls=[];
+  const client=await connect(t,async call=>{
+    calls.push(call);
+    if(call.method==='selection')return snapshot({snapshotId:targetId,snapshotTtlSeconds:1800,selectionFormat:'text',
+      capabilities:{trackedReplacement:true}});
+    assert.equal(call.method,'clipboard');return {...receipt(),tracked:true};
+  });
+  await compactRead(client);
+  const result=await compactWrite(client,{trackChanges:true});
+  assert.ok(!result.isError);assert.equal(data(result).tracked,true);
+  assert.deepEqual(calls.map(call=>call.method),['selection','clipboard']);
+});
+
+test('the panel capture warms tracked support, but never grants it to another session',async t=>{
+  const calls=[];
+  const client=await connect(t,async call=>{
+    calls.push(call);
+    if(call.method==='selection')return snapshot({capabilities:{trackedReplacement:true}});
+    if(call.method==='state')return {ready:true,capabilities:{}};
+    return {...receipt(),tracked:true};
+  });
+  await client.callTool({name:'native_lyx_rpc',arguments:{sessionId,method:'selection',params:{captureEdit:true}}});
+  assert.ok(!(await compactWrite(client,{trackChanges:true})).isError);
+  const other=await compactWrite(client,{sessionId:'different-engine',trackChanges:true});
+  assert.equal(other.isError,true);assert.equal(data(other).outcome,'not_applied');
+  assert.deepEqual(calls.map(call=>call.method),['selection','clipboard','state']);
 });
 
 test('the UI selection relay identifies snapshot tools registered by this MCP service',async t=>{
@@ -96,7 +125,7 @@ test('snapshot edit uses one native call and returns only its bounded receipt',a
   const result=await compactWrite(client);
   assert.ok(!result.isError);
   assert.deepEqual(calls,[{sessionId,method:'clipboard',params:{action:'replace-snapshot',snapshotId:targetId,
-    replacement:{format:'text',text:'Replacement'}}}]);
+    replacement:{format:'text',text:'Replacement'},trackChanges:false}}]);
   assert.deepEqual(data(result),{sessionId,...receipt()});
   assert.ok(!JSON.stringify(result).includes('private-secret'));
   assert.equal(data(result).source,undefined);
@@ -327,7 +356,7 @@ for(const format of ['text','math'])
     assert.ok(!result.isError);
     assert.deepEqual(calls,[
       {sessionId,method:'state',params:{}},
-      {sessionId,method:'clipboard',params:{action:'replace-selection',path,sourceRevision:hash(source),selection:selected,replacement}},
+      {sessionId,method:'clipboard',params:{action:'replace-selection',path,sourceRevision:hash(source),selection:selected,replacement,trackChanges:false}},
     ]);
     assert.equal(data(result).applied,true);
     assert.equal(data(result).source,changedSource);
@@ -408,4 +437,66 @@ for(const kind of ['direct-error','transport-error','invalid-snapshot'])
     assert.equal(data(result).outcome,'applied');
     assert.equal(data(result).readBeforeRetry,true);
     assert.match(data(result).message,/The edit was applied/);
+  });
+
+test('AI edits default to tracked changes and refuse silent fallback on an older engine',async t=>{
+  const calls=[];let supported=false;
+  const client=await connect(t,async call=>{
+    calls.push(call);
+    if(call.method==='state')return snapshot({capabilities:{editSelection:true,compositionGuard:true,trackedReplacement:supported}});
+    return {...snapshot(),applied:true,tracked:true};
+  });
+  const input=args();delete input.trackChanges;
+  let result=await replace(client,input);
+  assert.equal(result.isError,true);assert.equal(calls.length,1);assert.equal(data(result).outcome,'not_applied');
+  supported=true;result=await replace(client,input);
+  assert.ok(!result.isError);assert.equal(calls.at(-1).params.trackChanges,true);assert.equal(data(result).tracked,true);
+});
+
+test('compact AI edits default to tracking and check engine support before any mutation',async t=>{
+  const calls=[];let supported=false;
+  const client=await connect(t,async call=>{
+    calls.push(call);
+    if(call.method==='state')return {ready:true,capabilities:{trackedReplacement:supported}};
+    return {...receipt(),tracked:true};
+  });
+  const input={sessionId,snapshotId:targetId,replacement:{format:'text',text:'Replacement'}};
+  let result=await client.callTool({name:'replace_native_lyx_snapshot',arguments:input});
+  assert.equal(result.isError,true);assert.equal(data(result).outcome,'not_applied');
+  assert.equal(calls.length,1);assert.equal(calls[0].method,'state');
+  supported=true;
+  result=await client.callTool({name:'replace_native_lyx_snapshot',arguments:input});
+  assert.ok(!result.isError);assert.equal(data(result).tracked,true);
+  assert.equal(calls.at(-1).method,'clipboard');assert.equal(calls.at(-1).params.trackChanges,true);
+});
+
+test('review tools preserve anchored comments and report stale or uncertain operations accurately',async t=>{
+  const calls=[];let outcome='success';
+  const comment={id:'8aa32010-d5ec-4da3-997e-01a603b84321',quote:'Original',text:'Add evidence.',resolved:false,anchor:start};
+  const client=await connect(t,async call=>{
+    calls.push(call);
+    if(call.method==='state')return snapshot({capabilities:{review:true,compositionGuard:true}});
+    if(outcome==='stale')return {error:true,code:'revision_conflict',message:'Read again'};
+    if(outcome==='unknown')throw new Error('Lost reply');
+    return {...snapshot(),applied:true,review:{tracking:false,comments:[comment]}};
+  });
+  const input={sessionId,path,sourceRevision:hash(source),operation:'comment-add',selection:selected,text:comment.text};
+  let result=await client.callTool({name:'review_native_lyx',arguments:input});
+  assert.ok(!result.isError);assert.deepEqual(data(result).review.comments,[comment]);
+  assert.equal(calls.at(-1).params.action,'review');assert.equal(calls.at(-1).params.text,comment.text);
+  outcome='stale';result=await client.callTool({name:'review_native_lyx',arguments:input});
+  assert.equal(data(result).outcome,'not_applied');
+  outcome='unknown';result=await client.callTool({name:'review_native_lyx',arguments:input});
+  assert.equal(data(result).outcome,'unknown');assert.equal(data(result).readBeforeRetry,true);
+});
+
+for(const code of ['revision_conflict','selection_conflict','document_mismatch','input_pending'])
+  test(`native ${code} is a clear rejection and never an applied result`,async t=>{
+    const client=await connect(t,async call=>call.method==='state'?{ready:true,capabilities:{editSelection:true,compositionGuard:true}}
+      :{error:true,code,message:'Read the latest native state before editing'});
+    const result=await replace(client);
+    assert.equal(result.isError,true);
+    assert.equal(data(result).code,code);
+    assert.equal(data(result).applied,false);
+    assert.equal(data(result).outcome,'not_applied');
   });

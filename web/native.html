@@ -39,9 +39,24 @@ footer{border-top:1px solid #d8d8dc}
 /* An offscreen native caret must not grow the browser's scrollable area.
    Unlike overflow:hidden, clip cannot scroll the relay when it gains focus. */
 #ime-layer{position:absolute;inset:0;overflow:clip;pointer-events:none;z-index:100}
+#workspace{display:flex;flex:1;min-height:0}#review-panel{width:310px;max-width:48%;overflow:auto;background:#fafafa;border-left:1px solid #ccc;padding:12px}#review-panel[hidden]{display:none}.review-actions{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0}.review-actions button{padding:5px 8px}#review-panel h2{font-size:14px;margin:4px 0 10px}#review-panel h3{font-size:13px;margin:18px 0 8px}#review-panel textarea{width:100%;min-height:85px;font:inherit;resize:vertical}#review-panel blockquote{margin:7px 0;padding-left:8px;border-left:2px solid #98aca7;color:#555;white-space:pre-wrap;max-height:90px;overflow:auto}.review-comment{border:1px solid #d5dcd9;border-radius:6px;padding:9px;margin:8px 0;background:white}.review-comment p{white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 0}.review-comment.resolved{opacity:.65}.review-hint{font-size:12px;color:#666;line-height:1.45}#review-error{color:#953525;white-space:pre-wrap}#review-draft[hidden]{display:none}#review-count{color:#666;font-weight:normal}
+
+#viewport{min-width:0}#review-panel{background:#f5f5f7}
 </style></head><body>
-<header><strong id="filename">LyX Editor</strong><span id="saved">Connecting</span><button id="save" disabled>Save</button></header>
-<main id="viewport"><div id="loading">Connecting to Codex…</div><div id="surfaces" role="application" aria-label="Native LyX editing area"></div><div id="ime-layer"><textarea id="input" wrap="off" aria-label="LyX keyboard input" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea></div><div id="connection-banner" role="status" aria-live="polite" hidden><span id="connection-message"></span><button id="retry">Retry</button><button id="reopen" hidden>Reopen editor</button></div></main>
+<header><strong id="filename">LyX Editor</strong><span id="saved">Connecting</span><button id="review-toggle" aria-expanded="false" aria-controls="review-panel">Review</button><button id="save" disabled>Save</button></header>
+<div id="workspace"><main id="viewport"><div id="loading">Connecting to Codex…</div><div id="surfaces" role="application" aria-label="Native LyX editing area"></div><div id="ime-layer"><textarea id="input" wrap="off" aria-label="LyX keyboard input" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea></div><div id="connection-banner" role="status" aria-live="polite" hidden><span id="connection-message"></span><button id="retry">Retry</button><button id="reopen" hidden>Reopen editor</button></div></main>
+<aside id="review-panel" hidden aria-label="Review changes and comments">
+<h2>Review</h2><p class="review-hint" id="review-support">Open a document to review it.</p>
+<label><input id="review-track" type="checkbox"> Track my edits</label>
+<div class="review-actions"><button id="review-previous">Previous change</button><button id="review-next">Next change</button><button id="review-accept">Accept</button><button id="review-reject">Reject</button></div>
+<h3>Comments <span id="review-count"></span></h3>
+<div class="review-actions"><button id="review-new">Annotate selection</button><button id="review-refresh">Refresh</button></div>
+<div id="review-draft" hidden><blockquote id="review-quote"></blockquote><label for="review-text">Comment</label><textarea id="review-text" maxlength="16000" placeholder="Describe the change or question…"></textarea><div class="review-actions"><button id="review-submit">Add comment</button><button id="review-cancel">Cancel</button></div></div>
+<p id="review-error" role="status"></p>
+<button id="review-attach" disabled>add comments to chat</button>
+<p class="review-hint">Annotate several places, then attach the checked comments together. Your chat draft stays unchanged.</p>
+<div id="review-comments"></div>
+</aside></div>
 <footer><div id="status"><span id="selection">Select text or a formula in LyX</span><small id="connection">Connecting to this chat</small></div><button id="add" disabled>add to chat</button></footer>
 <div id="notice" role="status" aria-live="polite"></div>
 <script type="module">/* NATIVE_JS */</script></body></html>

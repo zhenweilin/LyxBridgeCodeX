@@ -1,0 +1,141 @@
+{
+  "date": "2026-10-23",
+  "baseline": {
+    "baseline": true,
+    "samples": 25,
+    "scope": "Local native engine + broker + transports; excludes Codex host and model latency",
+    "documents": [
+      {
+        "paragraphs": 20,
+        "sourceBytes": 3836,
+        "operations": {
+          "mcpFullRead": {
+            "medianMs": 1.275499999999738,
+            "p95Ms": 2.468917000000147,
+            "medianBytes": 14604
+          },
+          "mcpSelection": {
+            "medianMs": 1.7334159999991243,
+            "p95Ms": 2.0368749999997817,
+            "medianBytes": 1280
+          },
+          "mcpTrackedEdit": {
+            "medianMs": 1.9191250000003492,
+            "p95Ms": 2.3875829999997222,
+            "medianBytes": 988
+          }
+        }
+      },
+      {
+        "paragraphs": 2000,
+        "sourceBytes": 327496,
+        "operations": {
+          "mcpFullRead": {
+            "medianMs": 21.81462499999907,
+            "p95Ms": 23.425499999999374,
+            "medianBytes": 715408
+          },
+          "mcpSelection": {
+            "medianMs": 8.720041999999012,
+            "p95Ms": 9.2137500000008,
+            "medianBytes": 1292
+          },
+          "mcpTrackedEdit": {
+            "medianMs": 19.917583999998897,
+            "p95Ms": 23.753124999999272,
+            "medianBytes": 992
+          }
+        }
+      }
+    ]
+  },
+  "optimized": {
+    "baseline": false,
+    "samples": 25,
+    "scope": "Local native engine + broker + transports; excludes Codex host and model latency",
+    "documents": [
+      {
+        "paragraphs": 20,
+        "sourceBytes": 3836,
+        "operations": {
+          "mcpFullRead": {
+            "medianMs": 1.5184580000004644,
+            "p95Ms": 2.7748330000013084,
+            "medianBytes": 14604
+          },
+          "mcpSelection": {
+            "medianMs": 2.060124999999971,
+            "p95Ms": 2.393540999999459,
+            "medianBytes": 1334
+          },
+          "mcpTrackedEdit": {
+            "medianMs": 1.830167000000074,
+            "p95Ms": 2.1629590000011376,
+            "medianBytes": 988
+          },
+          "directTrackedEdit": {
+            "medianMs": 1.5799589999987802,
+            "p95Ms": 2.108457999998791,
+            "medianBytes": 450
+          },
+          "cliWarmTrackedEdit": {
+            "medianMs": 1.5871250000000146,
+            "p95Ms": 2.07825000000048,
+            "medianBytes": 450
+          },
+          "cliColdTrackedEdit": {
+            "medianMs": 114.10529099999985,
+            "p95Ms": 118.88416599999982,
+            "medianBytes": 450
+          },
+          "cliApplyTwoEdits": {
+            "medianMs": 2.256875000000946,
+            "p95Ms": 2.594999999999345,
+            "medianBytes": 450
+          }
+        }
+      },
+      {
+        "paragraphs": 2000,
+        "sourceBytes": 327496,
+        "operations": {
+          "mcpFullRead": {
+            "medianMs": 21.704000000001543,
+            "p95Ms": 24.083166000000347,
+            "medianBytes": 715408
+          },
+          "mcpSelection": {
+            "medianMs": 8.883291999998619,
+            "p95Ms": 9.692792000001646,
+            "medianBytes": 1346
+          },
+          "mcpTrackedEdit": {
+            "medianMs": 16.077792000000045,
+            "p95Ms": 17.145042000000103,
+            "medianBytes": 992
+          },
+          "directTrackedEdit": {
+            "medianMs": 15.703125,
+            "p95Ms": 16.247125000001688,
+            "medianBytes": 452
+          },
+          "cliWarmTrackedEdit": {
+            "medianMs": 15.758708000001207,
+            "p95Ms": 17.929082999999082,
+            "medianBytes": 452
+          },
+          "cliColdTrackedEdit": {
+            "medianMs": 128.91741699999693,
+            "p95Ms": 134.35658299999704,
+            "medianBytes": 452
+          },
+          "cliApplyTwoEdits": {
+            "medianMs": 24.203999999997905,
+            "p95Ms": 25.068583000000217,
+            "medianBytes": 452
+          }
+        }
+      }
+    ]
+  }
+}

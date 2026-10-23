@@ -82,7 +82,7 @@ test('real stdio model tools safely edit an isolated native buffer, preserve uns
       await rpc('input',{type:'keyup',key,text,...modifiers});
       return settled();
     };
-    const request=(snapshot,replacement)=>({sessionId,path:snapshot.path,sourceRevision:snapshot.sourceRevision,
+    const request=(snapshot,replacement)=>({sessionId,trackChanges:false,path:snapshot.path,sourceRevision:snapshot.sourceRevision,
       selection:snapshot.clipboardSelection,replacement});
     const replace=async(snapshot,replacement)=>{
       const result=await call('replace_native_lyx_selection',request(snapshot,replacement));
@@ -105,7 +105,7 @@ test('real stdio model tools safely edit an isolated native buffer, preserve uns
       assert.ok(target.snapshotId);
       return target;
     };
-    const editTarget=(target,replacement)=>call('replace_native_lyx_snapshot',{sessionId,snapshotId:target.snapshotId,replacement});
+    const editTarget=(target,replacement)=>call('replace_native_lyx_snapshot',{sessionId,snapshotId:target.snapshotId,replacement,trackChanges:false});
     const rejectTarget=async(target,replacement,code)=>{
       const before=await read();
       const result=await editTarget(target,replacement);
@@ -207,6 +207,27 @@ test('real stdio model tools safely edit an isolated native buffer, preserve uns
     assert.equal((await read()).source,before.source,'Retry returns the past receipt even after undo, without reapplying');
     await rejectTarget(target,{format:'text',text:'Different second edit'},'snapshot_used');
     assert.equal((await command('redo')).source,afterTarget.source);
+
+    // The default MCP snapshot path must record revisions too. Its retry key
+    // includes the review mode, so a direct edit cannot replay a tracked edit.
+    await command('buffer-end');await command('line-begin-select');
+    const reviewBefore=await read(),reviewTarget=await capture();
+    await command('buffer-begin');
+    const trackedArguments={sessionId,snapshotId:reviewTarget.snapshotId,
+      replacement:{format:'text',text:'Proposed snapshot revision'}};
+    const trackedResult=await call('replace_native_lyx_snapshot',trackedArguments);
+    assert.ok(!trackedResult.isError,trackedResult.content?.[0]?.text);
+    assert.equal(trackedResult.structuredContent.tracked,true);
+    const trackedSource=(await read()).source;
+    assert.match(trackedSource,/\\change_deleted/);assert.match(trackedSource,/\\change_inserted/);
+    assert.ok(trackedSource.includes(reviewBefore.selection));
+    assert.match(trackedSource,/Proposed snapshot revision/);
+    const trackedReplay=await call('replace_native_lyx_snapshot',trackedArguments);
+    assert.equal(trackedReplay.structuredContent.replayed,true);
+    assert.equal((await read()).source,trackedSource,'A tracked retry cannot duplicate the proposed text');
+    const wrongMode=await call('replace_native_lyx_snapshot',{...trackedArguments,trackChanges:false});
+    assert.equal(wrongMode.structuredContent.code,'snapshot_used');
+    assert.equal((await command('undo')).source,reviewBefore.source,'Tracked snapshot replacement is one undo step');
 
     // Revision conflicts must not silently redirect or rebase to similar text.
     await command('buffer-end');await command('line-begin-select');
