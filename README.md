@@ -96,7 +96,9 @@ Choose **LaTeX Pseudocode** from the environment dropdown and press Enter. Edit 
 
 The dropdown includes While, For, For All, If/Else, Repeat/Until, Function, Procedure, State, Return, Comment and Input/Output templates. Inside a source block they insert commands at the caret; outside they create a complete block. LaTeX controls indentation and numbering. New blocks use `algpseudocodex` with visible end statements; existing `algpseudocode` or `algpseudocodex` package settings are retained. TeX and the chosen package must be installed.
 
-See the six-page [PDF guide](demo/pseudocode-guide.pdf), [editable LyX examples](demo/pseudocode-demo.lyx), and [standalone LaTeX examples](demo/pseudocode-demo.tex). The [guide source](demo/pseudocode-guide/main.tex) is also included. Regenerate the sources with `node scripts/generate-pseudocode-demo.mjs`. Existing Enumerate content is not converted automatically. After rebuilding, open a fresh document session to use the new native commands.
+Literal `\label{line:update}` commands in raw LaTeX now appear in LyX's Cross-Reference dialog. Insert a standard native reference and use Go to Label to return to its source. The index refreshes on editing and undo without inserting extra labels or changing exported code. Final numbers come from LaTeX; the editor shows source label names. Comments, verbatim examples, and common macro definitions are excluded. Macro expansion, external TeX files, and arbitrary TeX conditionals are not evaluated; source renames do not rewrite existing references.
+
+See the [PDF guide](demo/pseudocode-guide.pdf), [editable LyX examples](demo/pseudocode-demo.lyx), and [standalone LaTeX examples](demo/pseudocode-demo.tex). The [guide source](demo/pseudocode-guide/main.tex) includes a line-label example. Regenerate all sources with `node scripts/generate-pseudocode-demo.mjs`, or only the guide with `--guide-only`. Existing Enumerate content is not converted automatically. After rebuilding, open a fresh document session to use the new native commands.
 
 ## Development and verification
 

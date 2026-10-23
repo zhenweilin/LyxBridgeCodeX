@@ -17,6 +17,7 @@
 #include "FuncRequest.h"
 #include "LyXAction.h"
 #include "LyXRC.h"
+#include "TocBackend.h"
 #include "support/FileName.h"
 #include <QApplication>
 #include <QAbstractButton>
@@ -1233,7 +1234,23 @@ class CodexBridge : public QObject {
                         {"message", "Finish the current input before sharing a selection"}};
                 return captureCodexSelection(app_);
             }
-            return state(true);
+            QJsonObject result = state(true);
+            if (p["includeReferences"].toBool()) {
+                auto * window = app_->currentView();
+                auto * view = window ? window->documentBufferView() : nullptr;
+                if (view) {
+                    QJsonArray labels, broken;
+                    auto const * master = view->buffer().masterBuffer();
+                    for (auto const & item : *master->tocBackend().toc("label"))
+                        if (item.depth() == 0) labels.append(QJsonObject{
+                            {"name", toqstr(item.str())}, {"active", item.isOutput()},
+                            {"missing", item.isMissing()}, {"description", toqstr(item.prettyStr())}});
+                    for (auto const & item : *master->tocBackend().toc("brokenrefs"))
+                        broken.append(toqstr(item.str()));
+                    result["references"] = QJsonObject{{"labels", labels}, {"broken", broken}};
+                }
+            }
+            return result;
         }
         if (method == "state") return state(false);
         if (method == "clipboard") {

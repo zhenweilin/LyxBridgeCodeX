@@ -157,6 +157,39 @@ Use your own math macros in the source. Preamble definitions are available to bo
 
 \textbf{Package settings:} a new document receives \verb|\usepackage[noEnd=false]{algpseudocodex}| when needed. An existing \texttt{algpseudocodex} or \texttt{algpseudocode} setup is retained. The default \texttt{algpseudocodex} setting hides end statements; \texttt{noEnd=false} shows them, as in this guide.
 \newpage
+\pagetitle{CROSS-REFERENCES / SOURCE LABELS}{Refer to an algorithm line}
+Put a literal label after the statement it identifies. The embedded editor indexes labels in raw LaTeX, including the source inside a Preview block. Your source remains ordinary LaTeX.
+\labelhead{Source}
+\begin{lstlisting}
+\begin{algorithmic}[1]
+\State $x\gets 0$
+\While{$x<3$}
+  \State $x\gets x+1$\label{line:update}
+\EndWhile
+\end{algorithmic}
+The update is on line~\ref{line:update}.
+\end{lstlisting}
+\labelhead{Compiled result}
+\begin{algorithmic}[1]
+\State $x\gets 0$
+\While{$x<3$}
+  \State $x\gets x+1$\label{line:update}
+\EndWhile
+\end{algorithmic}
+The update is on line~\ref{line:update}.
+
+\labelhead{Insert the reference in LyX}
+\begin{enumerate}
+\item Add \verb|\label{line:update}| in the red LaTeX source box, immediately after the numbered statement.
+\item Leave the block and place the text cursor where the reference belongs.
+\item Open \textbf{Insert > Cross-Reference}, select \texttt{line:update}, choose \textbf{Standard}, and insert it. Source labels appear with the description \texttt{LaTeX source} when the dialog displays reference information.
+\item Use the reference dialog's \textbf{Go to Label} action to return to the source location. Editing, deleting and undoing the source label refresh the list.
+\end{enumerate}
+\labelhead{What the editor can know}
+The editor displays the label name; LaTeX determines the final line number. Compile the complete document twice when references change. Keep an algorithm's caption label separate from its line labels and use unique names.
+
+Literal labels in comments, verbatim examples and common macro definitions are ignored. Macro-generated names, labels in external TeX files, and arbitrary TeX conditional expansion are not evaluated. Rename source labels and their references together: editing the source name does not automatically rewrite references. A preview snippet is not a full-document reference resolver.
+\newpage
 \pagetitle{REFERENCE / EDITING AND RECOVERY}{Working with the new environments}
 \labelhead{Entries in the env dropdown}
 \renewcommand{\arraystretch}{1.16}
@@ -198,6 +231,10 @@ Copy the mathematical content into \verb|\State| commands. Replace typed While/F
 \end{document}
 `;
 await writeFile(resolve(guide,'main.tex'),tex);
+if(process.argv.includes('--guide-only')){
+ console.log('Generated the pseudocode guide source.');
+ process.exit(0);
+}
 let standaloneExamples=String.raw`\documentclass{article}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern,amsmath,amssymb,algorithm}
