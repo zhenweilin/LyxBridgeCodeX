@@ -11,7 +11,8 @@ export async function addNativeSelectionToChat(selection,extensions,{crypto:cryp
     hash=Array.from(new Uint8Array(await cryptoApi.subtle.digest('SHA-256',new TextEncoder().encode(selection.source))))
       .map(byte=>byte.toString(16).padStart(2,'0')).join('');
   }
-  const compact=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(selection.snapshotId??'')
+  const compact=selection.modelCapabilities?.selectionSnapshots===true
+    && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(selection.snapshotId??'')
     && ['text','math'].includes(selection.selectionFormat) && !!sessionId;
   const context=compact?{type:'lyx-selection',file:selection.path,sessionId,snapshotId:selection.snapshotId,
     format:selection.selectionFormat,text:selection.selection,bufferRevision:hash,unsaved:selection.modified,
@@ -26,5 +27,5 @@ export async function addNativeSelectionToChat(selection,extensions,{crypto:cryp
   const accepted=await extensions.modelContext.update({content:[{type:'text',text}],structuredContent:context});
   if(!accepted?.updateId)throw new Error('The host has not confirmed the selection context');
   const current=extensions.modelContext.getCurrent?.();
-  return {updateId:accepted.updateId,contextVerified:current?.updateId===accepted.updateId,contextAttached:true};
+  return {updateId:accepted.updateId,contextVerified:current?.updateId===accepted.updateId,contextAttached:true,snapshotAttached:compact};
 }

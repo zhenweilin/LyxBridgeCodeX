@@ -171,6 +171,11 @@ export function createServer({openNative=openNativeDocument,reopenNative=reopenN
         // host round trip. The marker lets old servers remain compatible.
         result={...await rpc({sessionId:args.sessionId,method:'state',params:{}},options),stateAfterInput:true};
       }
+      if(args.method==='selection' && args.params.captureEdit===true && !result.error){
+        // A rebuilt panel and native engine can still use an old MCP service.
+        // Only this service knows which editing tools it has registered.
+        result={...result,modelCapabilities:{selectionSnapshots:true}};
+      }
       return{content:[],_meta:{'lyx/rpc':result}};
     }
     catch(error){return nativeUiError(error);}

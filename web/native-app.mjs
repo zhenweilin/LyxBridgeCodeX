@@ -513,7 +513,7 @@ $('add').addEventListener('click',async()=>{
     $('add').dataset.contextUpdateId=accepted.updateId;
     $('add').dataset.contextVerified=String(accepted.contextVerified);
     $('add').dataset.contextAttached=String(accepted.contextAttached);
-    notice(selection.snapshotId?'Selection attached. You can move the cursor while discussing this passage.':'Selection attached as chat context. Your draft is unchanged.');
+    notice(accepted.snapshotAttached?'Selection attached. You can move the cursor while discussing this passage.':'Selection attached as chat context. Your draft is unchanged.');
   }catch(error){if(descriptor===target)notice(error.message);}
   finally{addingSelection=false;if(state)showState(state);}
 });

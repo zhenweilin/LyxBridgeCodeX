@@ -272,7 +272,7 @@ test('add to chat requests a compact snapshot and attaches its native target wit
   const ui=await harness(async request=>{
     calls.push(request);
     return {...state(request.sessionId),hasSelection:true,selection:'Compact passage',
-      sourceRevision:'a'.repeat(64),snapshotId,selectionFormat:'text'};
+      sourceRevision:'a'.repeat(64),snapshotId,selectionFormat:'text',modelCapabilities:{selectionSnapshots:true}};
   });
   ui.attach('A');await ui.paint();
   await ui.get('add').dispatch('click');
@@ -282,6 +282,21 @@ test('add to chat requests a compact snapshot and attaches its native target wit
   assert.equal(ui.contexts[0].structuredContent.sessionId,'A');
   assert.equal(ui.contexts[0].structuredContent.source,undefined);
   assert.match(ui.get('notice').textContent,/move the cursor/);
+  assert.equal(ui.drafts.length,0);
+});
+
+test('a rebuilt panel and native engine behind an old MCP service do not advertise an unavailable snapshot tool',async()=>{
+  const ui=await harness(async request=>({...state(request.sessionId),hasSelection:true,selection:'Passage',
+    sourceRevision:'a'.repeat(64),snapshotId:'94967851-1772-4cb8-a958-002606a48fab',selectionFormat:'text',
+    clipboardSelection:{kind:'document',hasSelection:true,text:'Passage',start:[{paragraph:0,position:0,cell:0}],end:[{paragraph:0,position:7,cell:0}]},
+    capabilities:{editSelection:true,compositionGuard:true,selectionSnapshots:true}}));
+  ui.attach('A');await ui.paint();await ui.get('add').dispatch('click');
+  assert.equal(ui.contexts[0].structuredContent.snapshotId,undefined);
+  assert.equal(ui.contexts[0].structuredContent.editingSupported,true);
+  assert.equal(ui.contexts[0].structuredContent.clipboardSelection.text,'Passage');
+  assert.doesNotMatch(ui.contexts[0].content[0].text,/replace_native_lyx_snapshot/);
+  assert.doesNotMatch(ui.get('notice').textContent,/move the cursor/);
+  assert.equal(ui.get('add').dataset.contextAttached,'true');
   assert.equal(ui.drafts.length,0);
 });
 

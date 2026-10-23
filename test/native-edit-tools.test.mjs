@@ -65,6 +65,31 @@ test('compact read of a legacy engine remains available without advertising a sa
   assert.equal(data(await compactRead(client)).editingSupported,false);
 });
 
+test('the UI selection relay identifies snapshot tools registered by this MCP service',async t=>{
+  const calls=[];
+  const client=await connect(t,async call=>{calls.push(call);return snapshot({snapshotId:targetId,selectionFormat:'text'});});
+  const result=await client.callTool({name:'native_lyx_rpc',arguments:{sessionId,method:'selection',params:{captureEdit:true}}});
+  assert.deepEqual(result.content,[],'Capability negotiation stays in the UI response');
+  assert.deepEqual(result._meta['lyx/rpc'].modelCapabilities,{selectionSnapshots:true});
+  assert.equal(result._meta['lyx/rpc'].snapshotId,targetId);
+  assert.deepEqual(calls,[{sessionId,method:'selection',params:{captureEdit:true}}]);
+  const {tools}=await client.listTools();
+  assert.ok(tools.some(tool=>tool.name==='replace_native_lyx_snapshot' && tool._meta.ui.visibility.includes('model')));
+});
+
+test('legacy UI selection reads retain their prior relay response',async t=>{
+  const client=await connect(t,async()=>snapshot());
+  const result=await client.callTool({name:'native_lyx_rpc',arguments:{sessionId,method:'selection',params:{}}});
+  assert.deepEqual(result._meta['lyx/rpc'],snapshot());
+});
+
+test('a failed selection capture cannot advertise an attached snapshot',async t=>{
+  const rejected={error:true,code:'input_pending',message:'Finish composition'};
+  const client=await connect(t,async()=>rejected);
+  const result=await client.callTool({name:'native_lyx_rpc',arguments:{sessionId,method:'selection',params:{captureEdit:true}}});
+  assert.deepEqual(result._meta['lyx/rpc'],rejected);
+});
+
 test('snapshot edit uses one native call and returns only its bounded receipt',async t=>{
   const calls=[];
   const client=await connect(t,async call=>{calls.push(call);return {...snapshot(),...receipt(),token:'private-secret'};});

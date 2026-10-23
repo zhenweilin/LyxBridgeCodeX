@@ -14,6 +14,8 @@ The supported native baseline is LyX **2.5.3**, pinned to commit `b6a54136e3fb51
 
 The web panel, MCP service, broker, and native editors have separate lifetimes. Rebuilding the web resources updates panels mounted afterward, but an existing MCP service retains its registered tools and JavaScript. Reinstalling the plugin registration alone does not prove that the host reconnected that service. The broker runs independently of Codex and may also retain older code after the host restarts.
 
+Selection snapshots require confirmation from both the native engine and the connected MCP service. If only the panel and engine have updated, **add to chat** retains the legacy selection workflow until the service also exposes the snapshot tools. It does not attach a snapshot ID or promise that moving the cursor is safe for a legacy edit.
+
 Save every document you need, including hidden LyX tabs, before deliberately closing old editing sessions for a backend update. A copy of the active document does not preserve other buffers or undo history. Do not delete the broker registry or kill processes merely to clear an opening error: the old processes may still own unsaved documents. Keep existing sessions until a controlled update is appropriate, then verify the newly connected service and a newly opened editor together.
 
 For current-host acceptance, verify the visible plugin panel and its **Connected to this chat** footer, edit and undo text, paste an editable formula, scroll in the actual side panel, and attach a selection while preserving a draft. A standalone debug page or a successful build does not verify the host's relay, clipboard, or chat-context behavior.

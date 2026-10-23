@@ -6,6 +6,7 @@ import {copyFile,readFile,mkdtemp,mkdir,writeFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {startBroker,brokerFile} from '../server/native-broker.mjs';
+import {addNativeSelectionToChat} from '../web/native-chat.mjs';
 
 const hash=value=>createHash('sha256').update(value).digest('hex');
 async function registryHash(){
@@ -156,7 +157,18 @@ test('real stdio model tools safely edit an isolated native buffer, preserve uns
     // before applying. The saved target must survive both collapsed and changed
     // selections without an external UI click or a second full-document read.
     await command('undo');
-    const target=await capture();
+    const captured=await capture();
+    const shared=await rpc('selection',{captureEdit:true});
+    assert.deepEqual(shared.modelCapabilities,{selectionSnapshots:true});
+    assert.equal(shared.source,undefined);
+    let attached;
+    const attachment=await addNativeSelectionToChat(shared,{modelContext:{update:async value=>{
+      attached=value.structuredContent;return {updateId:'native-integration-selection'};
+    }}},{sessionId});
+    assert.equal(attachment.snapshotAttached,true);
+    assert.equal(attached.sessionId,sessionId);
+    assert.equal(attached.snapshotId,shared.snapshotId);
+    const target={...captured,snapshotId:attached.snapshotId};
     assert.equal(target.selection.text,before.selection);
     assert.equal(target.sourceRevision,before.sourceRevision);
     await command('buffer-begin');

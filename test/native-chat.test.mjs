@@ -26,7 +26,7 @@ test('add to chat attaches selection context without accessing the composer or i
   assert.deepEqual(current.structuredContent.start,selection.selectionStart);
   assert.deepEqual(current.structuredContent.end,selection.selectionEnd);
   assert.equal(current.structuredContent.bufferRevision,createHash('sha256').update(selection.source).digest('hex'));
-  assert.deepEqual(result,{updateId:'accepted-1',contextVerified:true,contextAttached:true});
+  assert.deepEqual(result,{updateId:'accepted-1',contextVerified:true,contextAttached:true,snapshotAttached:false});
 });
 
 test('unconfirmed or unavailable context is not reported as add to chat success',async()=>{
@@ -49,7 +49,8 @@ test('dialog-field selection cannot be attached as the document selection',async
 test('native snapshots attach a direct edit target without source hashing or repeating the selection',async()=>{
   let current;
   const snapshotId='94967851-1772-4cb8-a958-002606a48fab';
-  await addNativeSelectionToChat({...selection,source:undefined,sourceRevision:'a'.repeat(64),snapshotId,selectionFormat:'text'},
+  await addNativeSelectionToChat({...selection,source:undefined,sourceRevision:'a'.repeat(64),snapshotId,selectionFormat:'text',
+    modelCapabilities:{selectionSnapshots:true}},
     {modelContext:{update:async value=>{current=value;return {updateId:'compact'};}}},
     {sessionId:'session',crypto:{get subtle(){assert.fail('Native revision must avoid browser hashing');}}});
   assert.equal(current.structuredContent.snapshotId,snapshotId);
@@ -63,3 +64,18 @@ test('native snapshots attach a direct edit target without source hashing or rep
 test('missing source and revision cannot fabricate a usable selection revision',async()=>{
   await assert.rejects(addNativeSelectionToChat({...selection,source:undefined},{modelContext:{}}),/document revision/);
 });
+
+for(const modelCapabilities of [undefined,{}, {selectionSnapshots:false},{selectionSnapshots:'true'}])
+  test(`a new native engine behind an older MCP service uses available legacy editing (${JSON.stringify(modelCapabilities)})`,async()=>{
+    let current;
+    const result=await addNativeSelectionToChat({...selection,source:undefined,sourceRevision:'a'.repeat(64),
+      snapshotId:'94967851-1772-4cb8-a958-002606a48fab',selectionFormat:'text',modelCapabilities,
+      capabilities:{editSelection:true,compositionGuard:true,selectionSnapshots:true}},
+      {modelContext:{update:async value=>{current=value;return {updateId:'legacy'};}}},
+      {sessionId:'session'});
+    assert.equal(current.structuredContent.snapshotId,undefined,'Native capabilities alone do not register a model tool');
+    assert.equal(current.structuredContent.editingSupported,true);
+    assert.deepEqual(current.structuredContent.clipboardSelection,selection.clipboardSelection);
+    assert.doesNotMatch(current.content[0].text,/replace_native_lyx_snapshot/);
+    assert.equal(result.snapshotAttached,false);
+  });
