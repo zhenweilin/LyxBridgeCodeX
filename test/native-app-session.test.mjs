@@ -267,6 +267,24 @@ test('add to chat keeps the clicked document and native session while another fi
   assert.equal(ui.drafts.length,0,'Adding context must not write to the composer or send a message');
 });
 
+test('add to chat requests a compact snapshot and attaches its native target without full source',async()=>{
+  const calls=[],snapshotId='94967851-1772-4cb8-a958-002606a48fab';
+  const ui=await harness(async request=>{
+    calls.push(request);
+    return {...state(request.sessionId),hasSelection:true,selection:'Compact passage',
+      sourceRevision:'a'.repeat(64),snapshotId,selectionFormat:'text'};
+  });
+  ui.attach('A');await ui.paint();
+  await ui.get('add').dispatch('click');
+  assert.equal(calls.filter(item=>item.method==='selection').length,1);
+  assert.equal(calls.find(item=>item.method==='selection').params.captureEdit,true);
+  assert.equal(ui.contexts[0].structuredContent.snapshotId,snapshotId);
+  assert.equal(ui.contexts[0].structuredContent.sessionId,'A');
+  assert.equal(ui.contexts[0].structuredContent.source,undefined);
+  assert.match(ui.get('notice').textContent,/move the cursor/);
+  assert.equal(ui.drafts.length,0);
+});
+
 test('a late result from the old document cannot restore its controls or status in the new panel',async()=>{
   const gate=deferred();
   const ui=await harness(async request=>{

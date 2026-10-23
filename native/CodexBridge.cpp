@@ -415,7 +415,7 @@ class CodexBridge : public QObject {
                 {"interactionRequired", main && prompt},
                 {"interactionTitle", promptTitle},
                 {"selectionStart", QJsonArray()}, {"selectionEnd", QJsonArray()},
-                {"capabilities", QJsonObject{{"pointerCancel", true}, {"editSelection", true}, {"compositionGuard", true}, {"imagePaste", true}, {"imagePasteChunks", true}, {"wheelInput", true}}},
+                {"capabilities", QJsonObject{{"pointerCancel", true}, {"editSelection", true}, {"compositionGuard", true}, {"selectionSnapshots", true}, {"imagePaste", true}, {"imagePasteChunks", true}, {"wheelInput", true}}},
                 {"inputPending", pendingInput_ > 0}};
             result["clipboardSelection"] = clipboardSelection(result);
             result["inputMethod"] = inputMethodState();
@@ -436,7 +436,7 @@ class CodexBridge : public QObject {
         auto & cursor = bv->cursor();
         QJsonObject result{{"ready", true}, {"path", toqstr(buffer.fileName().absFileName())},
             {"uiReady", true}, {"interactionRequired", false},
-            {"capabilities", QJsonObject{{"pointerCancel", true}, {"editSelection", true}, {"compositionGuard", true}, {"imagePaste", true}, {"imagePasteChunks", true}, {"wheelInput", true}}},
+            {"capabilities", QJsonObject{{"pointerCancel", true}, {"editSelection", true}, {"compositionGuard", true}, {"selectionSnapshots", true}, {"imagePaste", true}, {"imagePasteChunks", true}, {"wheelInput", true}}},
             {"inputPending", pendingInput_ > 0},
             {"modified", !buffer.isClean()},
             {"externalModified", buffer.notifiesExternalModification()
@@ -1226,15 +1226,23 @@ class CodexBridge : public QObject {
     }
     QJsonObject handle(QString const & method, QJsonObject const & p) {
         if (method == "frame") return frame(p);
-        if (method == "selection") return state(true);
+        if (method == "selection") {
+            if (p["captureEdit"].toBool()) {
+                if (compositionActive_ || pendingInput_ > 0)
+                    return {{"error", true}, {"code", "input_pending"},
+                        {"message", "Finish the current input before sharing a selection"}};
+                return captureCodexSelection(app_);
+            }
+            return state(true);
+        }
         if (method == "state") return state(false);
         if (method == "clipboard") {
-            if (p["action"] == "replace-selection") {
+            if (p["action"] == "replace-selection" || p["action"] == "replace-snapshot") {
                 if (compositionActive_) return {{"error", true}, {"applied", false},
                     {"code", "input_pending"}, {"message", "Finish or cancel the active input-method composition before editing"}};
                 if (pendingInput_ > 0) return {{"error", true}, {"applied", false},
                     {"code", "input_pending"}, {"message", "Native input is still pending; read the document again before editing"}};
-                return editCodexSelection(app_, p);
+                return p["action"] == "replace-snapshot" ? editCodexSnapshot(app_, p) : editCodexSelection(app_, p);
             }
             return clipboard(p);
         }

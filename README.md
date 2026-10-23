@@ -13,7 +13,7 @@ Native LyX editing inside Codex, with editable formulas and document context sha
 - Open native menus within the editor panel, with scrolling for long menus and working submenus in narrow panels.
 - Copy and paste native LyX content while retaining editable formulas.
 - Select text or a formula and click **add to chat** to attach context to the next message. It inserts no text into the composer and does not send a message.
-- Let Codex read the current unsaved document and replace a selection with revision and input-state checks.
+- Ask Codex to polish the attached passage directly. The saved selection survives cursor movement, checks for intervening document changes, and applies as one undoable edit without saving.
 
 The interface is English. Document language is independent of interface language. Each selection update replaces the previous context for that panel; it is not a growing collection of selections.
 
@@ -81,6 +81,8 @@ codex plugin add lyx-preview@lyxbridgecodex
 Each checkout uses its own local broker on an available loopback port. A fresh clone can be installed while an older checkout still has open documents; those existing native processes retain their edits until you save and close them.
 
 Open `demo/demo.lyx` in Codex, or ask Codex to open a local `.lyx` file through the plugin. The footer should say **Connected to this chat**. Select content and use **add to chat**, then type your request in Codex and submit it normally. Save in LyX when you want changes written to disk. `npm run editor` opens a local debugging view without chat integration.
+
+With the updated native engine, **add to chat** captures a compact edit target. You can move the cursor afterward; Codex can replace that exact passage in one tool call without reading the whole document. A changed document requires a fresh selection. Targets last 30 minutes, with the latest 32 retained per native process. An identical retry returns the original receipt instead of applying twice. Older running engines keep the legacy selection workflow until restarted after resolving unsaved work. See [selection editing](docs/editor-ux.md#selection-editing).
 
 For a connection problem, **Retry** checks the existing session. **Reopen editor** appears only after the native process is confirmed to have exited; it uses the last verified file path, including Save As, and preserves LyX's recovery choice. Queued edits are not replayed. Earlier chat selections remain historical snapshots and your draft stays unchanged; select content again to update the context. Broker loss alone cannot confirm that its editors exited, and neither ordinary editor requests nor Reopen editor starts a replacement broker. Missing initial file context shows **Waiting for file**; startup errors stay visible until resolved. See [recovery behavior and limits](docs/editor-ux.md).
 

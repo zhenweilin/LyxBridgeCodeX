@@ -45,3 +45,21 @@ test('dialog-field selection cannot be attached as the document selection',async
   await assert.rejects(addNativeSelectionToChat({...selection,clipboardSelection:{kind:'widget'}},extensions),/LyX document/);
   assert.equal(called,false);
 });
+
+test('native snapshots attach a direct edit target without source hashing or repeating the selection',async()=>{
+  let current;
+  const snapshotId='94967851-1772-4cb8-a958-002606a48fab';
+  await addNativeSelectionToChat({...selection,source:undefined,sourceRevision:'a'.repeat(64),snapshotId,selectionFormat:'text'},
+    {modelContext:{update:async value=>{current=value;return {updateId:'compact'};}}},
+    {sessionId:'session',crypto:{get subtle(){assert.fail('Native revision must avoid browser hashing');}}});
+  assert.equal(current.structuredContent.snapshotId,snapshotId);
+  assert.equal(current.structuredContent.format,'text');
+  assert.equal(current.structuredContent.bufferRevision,'a'.repeat(64));
+  assert.equal(current.structuredContent.clipboardSelection,undefined);
+  assert.match(current.content[0].text,/replace_native_lyx_snapshot/);
+  assert.equal(current.content[0].text.split(selection.selection).length,2);
+});
+
+test('missing source and revision cannot fabricate a usable selection revision',async()=>{
+  await assert.rejects(addNativeSelectionToChat({...selection,source:undefined},{modelContext:{}}),/document revision/);
+});

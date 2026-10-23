@@ -507,13 +507,13 @@ $('add').addEventListener('click',async()=>{
   try{
     // Capture at this click's position in the input queue. Waiting on its last
     // promise alone lets a newer edit run before this continuation resumes.
-    const selection=await nativeInputs.enqueue(()=>rpc('selection',{},target));
+    const selection=await nativeInputs.enqueue(()=>rpc('selection',{captureEdit:true},target));
     const accepted=await addNativeSelectionToChat(selection,extensions,{sessionId:target.sessionId});
     if(descriptor!==target || sessionExited(target))return;
     $('add').dataset.contextUpdateId=accepted.updateId;
     $('add').dataset.contextVerified=String(accepted.contextVerified);
     $('add').dataset.contextAttached=String(accepted.contextAttached);
-    notice('Selection attached as chat context. Your draft is unchanged.');
+    notice(selection.snapshotId?'Selection attached. You can move the cursor while discussing this passage.':'Selection attached as chat context. Your draft is unchanged.');
   }catch(error){if(descriptor===target)notice(error.message);}
   finally{addingSelection=false;if(state)showState(state);}
 });

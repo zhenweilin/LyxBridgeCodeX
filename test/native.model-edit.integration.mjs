@@ -95,6 +95,27 @@ test('real stdio model tools safely edit an isolated native buffer, preserve uns
       assert.deepEqual(await readFile(path),original,'Model edits must not implicitly save');
       return value;
     };
+    const capture=async()=>{
+      const result=await call('read_native_lyx_selection',{sessionId});
+      assert.ok(!result.isError,result.content?.[0]?.text);
+      const target=result.structuredContent;
+      assert.equal(target.editingSupported,true,'Build the snapshot-enabled native engine before running this test');
+      assert.equal(target.source,undefined);
+      assert.ok(target.snapshotId);
+      return target;
+    };
+    const editTarget=(target,replacement)=>call('replace_native_lyx_snapshot',{sessionId,snapshotId:target.snapshotId,replacement});
+    const rejectTarget=async(target,replacement,code)=>{
+      const before=await read();
+      const result=await editTarget(target,replacement);
+      assert.equal(result.isError,true);
+      assert.equal(result.structuredContent.code,code,result.content?.[0]?.text);
+      assert.equal(result.structuredContent.applied,false);
+      const after=await read();
+      assert.equal(after.source,before.source);
+      assert.deepEqual(after.cursor,before.cursor,'Rejection must not move the live cursor');
+      assert.deepEqual(after.clipboardSelection,before.clipboardSelection,'Rejection must not change the live selection');
+    };
 
     const initial=await read();
     assert.equal(initial.editingSupported,true,'Build the current native edit bridge before running this test');
@@ -131,6 +152,87 @@ test('real stdio model tools safely edit an isolated native buffer, preserve uns
     assert.equal((await command('undo')).source,before.source,'A single native undo restores the whole model edit');
     assert.equal((await command('redo')).source,changed.source);
 
+    // Capture in the native process, then deliberately select unrelated content
+    // before applying. The saved target must survive both collapsed and changed
+    // selections without an external UI click or a second full-document read.
+    await command('undo');
+    const target=await capture();
+    assert.equal(target.selection.text,before.selection);
+    assert.equal(target.sourceRevision,before.sourceRevision);
+    await command('buffer-begin');
+    await command('word-forward-select');
+    assert.notEqual((await read()).selection,target.selection.text);
+    await rejectTarget(target,{format:'math',text:'x'},'invalid_replacement');
+    const replacement={format:'text',text:'Snapshot replacement survives cursor movement\nSecond paragraph 中文'};
+    const writeStart=performance.now();
+    const applied=await editTarget(target,replacement);
+    const writeMs=performance.now()-writeStart;
+    assert.ok(!applied.isError,applied.content?.[0]?.text);
+    assert.equal(applied.structuredContent.applied,true);
+    assert.equal(applied.structuredContent.replayed,false);
+    assert.equal(applied.structuredContent.source,undefined);
+    const afterTarget=await read();
+    assert.match(afterTarget.source,/Unsaved user context survives model editing/);
+    assert.match(afterTarget.source,/Snapshot replacement survives cursor movement/);
+    assert.doesNotMatch(afterTarget.source,/Original MCP selected text/);
+    assert.equal(applied.structuredContent.sourceRevision,afterTarget.sourceRevision);
+    assert.deepEqual(await readFile(path),original,'Snapshot edits never save implicitly');
+    assert.equal((await command('undo')).source,before.source,'Snapshot edit is one undo step');
+    const replay=await editTarget(target,replacement);
+    assert.equal(replay.structuredContent.replayed,true);
+    assert.equal((await read()).source,before.source,'Retry returns the past receipt even after undo, without reapplying');
+    await rejectTarget(target,{format:'text',text:'Different second edit'},'snapshot_used');
+    assert.equal((await command('redo')).source,afterTarget.source);
+
+    // Revision conflicts must not silently redirect or rebase to similar text.
+    await command('buffer-end');await command('line-begin-select');
+    const conflictTarget=await capture();
+    await command('buffer-begin');await command('self-insert Concurrent user edit ');
+    await rejectTarget(conflictTarget,{format:'text',text:'Must never appear'},'revision_conflict');
+    await command('undo');
+    await rpc('input',{type:'composition',text:'candidate'});await settled();
+    await rejectTarget(conflictTarget,{format:'text',text:'Must never appear'},'input_pending');
+    const composingCapture=await call('read_native_lyx_selection',{sessionId});
+    assert.equal(composingCapture.structuredContent.code,'input_pending');
+    await rpc('input',{type:'composition',text:''});await settled();
+    await command('dialog-show document');
+    assert.ok((await rpc('frame',{width:1000,height:800})).surfaces.some(surface=>!surface.main),'The native document settings dialog must be visible');
+    await rejectTarget(conflictTarget,{format:'text',text:'Must never appear'},'not_editable');
+    await key(16777216); // Escape closes only the disposable native dialog.
+    await command('buffer-end');await command('line-begin-select');
+    const evicted=await capture();
+    for(let index=0;index<32;index++)await capture();
+    await rejectTarget(evicted,{format:'text',text:'Must never appear'},'snapshot_expired');
+    await rejectTarget({snapshotId:'94967851-1772-4cb8-a958-002606a48fab'},
+      {format:'text',text:'Must never appear'},'snapshot_expired');
+    const fullResult=await call('read_native_lyx',{sessionId});
+    const compactResult=await call('read_native_lyx_selection',{sessionId});
+    const measurement={fullReadBytes:Buffer.byteLength(JSON.stringify(fullResult)),
+      compactReadBytes:Buffer.byteLength(JSON.stringify(compactResult)),
+      fullEditBytes:Buffer.byteLength(JSON.stringify({content:[{type:'text',text:JSON.stringify(changed)}],structuredContent:changed})),
+      compactEditBytes:Buffer.byteLength(JSON.stringify(applied)),compactEditMs:writeMs};
+    assert.ok(measurement.compactReadBytes<measurement.fullReadBytes/2);
+    assert.ok(measurement.compactEditBytes<measurement.fullEditBytes/2);
+    await writeFile(join(directory,'snapshot-measurement.json'),JSON.stringify(measurement,null,2)+'\n');
+    console.log(`Snapshot payload/latency comparison: ${JSON.stringify(measurement)}`);
+
+    // Preserve the captured caret's font, including backwards selections. A
+    // restored target must produce the same source as the legacy native edit.
+    for(const direction of ['backward','forward']){
+      for(const action of ['buffer-end','paragraph-break','layout Standard','font-bold','self-insert Bold ',
+        'font-bold','self-insert plain','line-begin-select'])await command(action);
+      if(direction==='forward'){await command('line-begin');await command('line-end-select');}
+      const styledBefore=await read();
+      const styledReplacement={format:'text',text:`Styled ${direction} replacement`};
+      const styledExpected=await replace(styledBefore,styledReplacement);
+      await command('undo');
+      const styledTarget=await capture();
+      await command('buffer-begin');
+      const styledResult=await editTarget(styledTarget,styledReplacement);
+      assert.ok(!styledResult.isError,styledResult.content?.[0]?.text);
+      assert.equal((await read()).source,styledExpected.source,`Font and source match for ${direction} selection`);
+    }
+
     for(const action of ['buffer-end','paragraph-break','layout Standard'])await command(action);
     await key(77,'m',{meta:true});await key(88,'x');await key(94,'^',{shift:true});await key(50,'2');
     const mathBefore=await command('char-backward-select');
@@ -138,6 +240,16 @@ test('real stdio model tools safely edit an isolated native buffer, preserve uns
     assert.ok(mathBefore.selectionStart.length>=3,'The replacement must target a native nested math cell');
     const mathAfter=await replace(mathBefore,{format:'math',text:'\\frac{a}{b}'});
     assert.match(mathAfter.source,/\\begin_inset Formula \$x\^\{\\frac\{a\}\{b\}\}\$/);
+    assert.equal((await command('undo')).source,mathBefore.source);
+    assert.equal((await command('redo')).source,mathAfter.source);
+    await command('undo');
+    const mathTarget=await capture();
+    assert.equal(mathTarget.selectionFormat,'math');
+    assert.ok(mathTarget.selection.start.length>=3);
+    await command('buffer-begin');
+    const mathResult=await editTarget(mathTarget,{format:'math',text:'\\frac{a}{b}'});
+    assert.ok(!mathResult.isError,mathResult.content?.[0]?.text);
+    assert.equal((await read()).source,mathAfter.source,'Restoring a nested math target reproduces the native current-selection edit');
     assert.equal((await command('undo')).source,mathBefore.source);
     assert.equal((await command('redo')).source,mathAfter.source);
 

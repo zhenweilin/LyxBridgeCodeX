@@ -26,6 +26,8 @@ const nativePosition=z.object({
 }).strict();
 const nativePositions=z.array(nativePosition).min(1).max(64);
 const boundedEditText=z.string().max(128*1024).regex(/^[^\0]*$/u);
+const typedReplacement=z.object({format:z.enum(['text','math']),text:boundedEditText}).strict();
+const snapshotId=z.string().uuid();
 const replacementInput=z.object({
   sessionId:nativeSessionId,
   path:z.string().min(1).max(4096).regex(/^[^\0]*$/u),
@@ -34,7 +36,7 @@ const replacementInput=z.object({
     kind:z.literal('document'),hasSelection:z.literal(true),text:boundedEditText,
     start:nativePositions,end:nativePositions,
   }).strict(),
-  replacement:z.object({format:z.enum(['text','math']),text:boundedEditText}).strict(),
+  replacement:typedReplacement,
 }).strict();
 const documentSelection=z.object({
   kind:z.literal('document'),hasSelection:z.boolean(),text:z.string(),
@@ -54,7 +56,18 @@ const nativeSnapshot=z.object({
   clipboardSelection:z.union([documentSelection,widgetSelection]).optional(),
   capabilities:z.object({editSelection:z.boolean().optional(),compositionGuard:z.boolean().optional()}).optional(),
 });
-const editRejections=new Set(['not_editable','document_mismatch','revision_conflict','selection_conflict','invalid_replacement','input_pending']);
+const editRejections=new Set(['not_editable','document_mismatch','revision_conflict','selection_conflict','invalid_replacement','input_pending','snapshot_expired','snapshot_used']);
+const compactSelection=z.object({
+  ready:z.literal(true),path:z.string().min(1),modified:z.boolean(),sourceRevision:revision,
+  clipboardSelection:documentSelection,
+  snapshotId:snapshotId.optional(),snapshotTtlSeconds:z.number().int().positive().optional(),
+  selectionFormat:z.enum(['text','math']).optional(),
+}).refine(value=>!value.snapshotId || (value.clipboardSelection.hasSelection && value.selectionFormat && value.snapshotTtlSeconds),
+  'A native edit target must identify a selected passage, replacement format and lifetime');
+const snapshotReceipt=z.object({
+  applied:z.literal(true),path:z.string().min(1),modified:z.boolean(),
+  sourceRevision:revision,previousSourceRevision:revision,snapshotId,replayed:z.boolean(),
+});
 const supportsModelEditing=state=>state.capabilities?.editSelection===true && state.capabilities?.compositionGuard===true;
 function nativeFailure(value,fallback='The native LyX operation failed'){
   const error=new Error(String(value?.message??fallback).slice(0,2000));
@@ -173,6 +186,48 @@ export function createServer({openNative=openNativeDocument,reopenNative=reopenN
       const snapshot=await rpc({sessionId,method:'selection',params:{}},{signal:context.mcpReq?.signal});
       return modelResult(modelSnapshot(snapshot,sessionId));
     }catch(error){return modelError(error,sessionId);}
+  });
+  server.registerTool('read_native_lyx_selection',{
+    title:'Capture a compact native LyX selection',
+    description:'Capture the selected text or formula and a revision-checked edit target without returning the whole document. If attached LyX context already contains a snapshotId, use replace_native_lyx_snapshot directly; no read is needed. A snapshot survives cursor movement, expires after 30 minutes or 32 newer captures, and rejects changes to the document. An old engine may return editingSupported:false; use read_native_lyx for its legacy editing workflow.',
+    inputSchema:z.object({sessionId:nativeSessionId}).strict(),
+    annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},
+    _meta:{ui:{visibility:['model']}}
+  },async({sessionId},context)=>{
+    try{
+      const value=requireNativeResult(await rpc({sessionId,method:'selection',params:{captureEdit:true}},{signal:context.mcpReq?.signal}));
+      const parsed=compactSelection.safeParse(value);
+      if(!parsed.success)throw new Error('Native LyX did not return a valid selection. Use read_native_lyx to inspect this older session.');
+      const {ready,clipboardSelection,...target}=parsed.data;
+      return modelResult({sessionId,...target,selection:clipboardSelection,editingSupported:!!target.snapshotId});
+    }catch(error){return modelError(error,sessionId);}
+  });
+  server.registerTool('replace_native_lyx_snapshot',{
+    title:'Edit a shared native LyX selection',
+    description:'Apply text or math to the snapshotId in attached LyX selection context or read_native_lyx_selection. Call directly without rereading the document or restoring its highlight. The native engine verifies the exact saved revision and range, preserves unsaved work, and creates one undo step without saving. Moving the cursor is allowed; document changes require a fresh selection. Retrying the identical snapshotId and replacement returns the original receipt without editing twice. replayed:true reports that past edit, not the current document state.',
+    inputSchema:z.object({sessionId:nativeSessionId,snapshotId,replacement:typedReplacement}).strict(),
+    annotations:{readOnlyHint:false,destructiveHint:true,idempotentHint:true,openWorldHint:false},
+    _meta:{ui:{visibility:['model']}}
+  },async({sessionId,snapshotId,...params},context)=>{
+    let applied=false;
+    try{
+      const changed=await rpc({sessionId,method:'clipboard',params:{action:'replace-snapshot',snapshotId,...params}},{signal:context.mcpReq?.signal});
+      applied=changed?.applied===true;
+      requireNativeResult(changed);
+      const parsed=snapshotReceipt.safeParse(changed);
+      if(!parsed.success || parsed.data.snapshotId!==snapshotId)
+        throw new Error('Native LyX did not return a valid receipt for this selection edit.');
+      return modelResult({sessionId,...parsed.data});
+    }catch(error){
+      const result=modelError(error,sessionId,{write:true,attempted:true,applied});
+      const data=result.structuredContent;
+      if(data.outcome==='unknown'){
+        delete data.readBeforeRetry;
+        data.retrySameSnapshot=true;
+        data.message=`Retry only the identical snapshotId and replacement to recover its receipt without applying twice. ${String(error?.message??'The native result was not confirmed').slice(0,2000)}`;
+      }
+      return {...modelResult(data),isError:true};
+    }
   });
   server.registerTool('replace_native_lyx_selection',{
     title:'Replace the current native LyX selection',

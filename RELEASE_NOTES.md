@@ -18,7 +18,7 @@ Experimental LyX source overlay and Codex plugin for macOS Apple Silicon. Source
 - Clicking outside a native menu dismisses its full submenu chain without activating the underlying document. Popup routing follows queued input order and retains menu-bar switching and pointer cancellation.
 - Command-? (Command-Shift-/) opens the native Help menu in the embedded macOS editor; Escape and outside clicks dismiss it without changing the document selection.
 - **add to chat** attaches only selection context. No text is inserted into the composer and no message is automatically sent.
-- Read and replace native unsaved selections with revision and input-state guards.
+- **add to chat** captures a compact native selection snapshot. Codex can edit it directly after the cursor moves, with exact document revision checks, one-step undo and no automatic save. Snapshot edits use one RPC and return a compact receipt; identical retries cannot apply twice. Snapshots last 30 minutes with the latest 32 retained per process. Existing engines and tools retain the legacy workflow until refreshed.
 - Portable local configuration, Qt-prefix detection, support for an existing pinned LyX source checkout, a self-contained example, build scripts, compact overlay archives, and SHA-256 checksums.
 
 **Tested Codex desktop: 26.1016.51333 (build 21161).** Plugin-installation CLI: 0.163.0-alpha.11. Native environment: macOS 26.7.1 arm64, Qt 5.15.2. These identify verified environments; other versions and platforms are not guaranteed.

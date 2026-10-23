@@ -35,10 +35,98 @@ async function connect(t,rpc){
 }
 const read=client=>client.callTool({name:'read_native_lyx',arguments:{sessionId}});
 const replace=(client,arguments_=args())=>client.callTool({name:'replace_native_lyx_selection',arguments:arguments_});
+const targetId='94967851-1772-4cb8-a958-002606a48fab';
+const compactRead=client=>client.callTool({name:'read_native_lyx_selection',arguments:{sessionId}});
+const compactWrite=(client,extra={})=>client.callTool({name:'replace_native_lyx_snapshot',arguments:{
+  sessionId,snapshotId:targetId,replacement:{format:'text',text:'Replacement'},...extra}});
+const receipt=()=>({applied:true,path,modified:true,sourceRevision:hash('after'),previousSourceRevision:hash(source),
+  snapshotId:targetId,replayed:false});
 function data(result){
   assert.deepEqual(JSON.parse(result.content[0].text),result.structuredContent,'Model text and structured output must agree');
   return result.structuredContent;
 }
+
+test('compact selection captures once without full source, transport metadata or duplicated selected text',async t=>{
+  const calls=[];
+  const client=await connect(t,async call=>{calls.push(call);return snapshot({
+    snapshotId:targetId,snapshotTtlSeconds:1800,selectionFormat:'text',token:'private-secret',
+  });});
+  const result=await compactRead(client);
+  assert.ok(!result.isError);
+  assert.deepEqual(calls,[{sessionId,method:'selection',params:{captureEdit:true}}]);
+  assert.deepEqual(data(result),{sessionId,path,modified:true,sourceRevision:hash(source),selection:selected,
+    snapshotId:targetId,snapshotTtlSeconds:1800,selectionFormat:'text',editingSupported:true});
+  assert.ok(!JSON.stringify(result).includes('private-secret'));
+  assert.equal(data(result).source,undefined);
+});
+
+test('compact read of a legacy engine remains available without advertising a saved edit target',async t=>{
+  const client=await connect(t,async()=>snapshot());
+  assert.equal(data(await compactRead(client)).editingSupported,false);
+});
+
+test('snapshot edit uses one native call and returns only its bounded receipt',async t=>{
+  const calls=[];
+  const client=await connect(t,async call=>{calls.push(call);return {...snapshot(),...receipt(),token:'private-secret'};});
+  const result=await compactWrite(client);
+  assert.ok(!result.isError);
+  assert.deepEqual(calls,[{sessionId,method:'clipboard',params:{action:'replace-snapshot',snapshotId:targetId,
+    replacement:{format:'text',text:'Replacement'}}}]);
+  assert.deepEqual(data(result),{sessionId,...receipt()});
+  assert.ok(!JSON.stringify(result).includes('private-secret'));
+  assert.equal(data(result).source,undefined);
+  const {tools}=await client.listTools();
+  const tool=tools.find(item=>item.name==='replace_native_lyx_snapshot');
+  assert.equal(tool.annotations.idempotentHint,true);
+  assert.deepEqual(tool._meta.ui.visibility,['model']);
+  assert.equal(tool.inputSchema.additionalProperties,false);
+});
+
+test('strict snapshot arguments reject extra actions, invalid IDs and oversized replacements before RPC',async t=>{
+  const client=await connect(t,async()=>assert.fail('Invalid snapshot arguments must not reach native RPC'));
+  for(const extra of [{snapshotId:'not-a-uuid'},{url:'http://private.invalid'},
+    {replacement:{format:'text',text:'x',save:true}},{replacement:{format:'text',text:'x'.repeat(128*1024+1)}},
+    {replacement:{format:'text',text:'bad\0text'}},{replacement:{format:'source',text:'x'}}])
+    assert.equal((await compactWrite(client,extra)).isError,true);
+});
+
+test('snapshot receipt replay is reported explicitly without extra reads',async t=>{
+  let calls=0;
+  const client=await connect(t,async()=>{calls++;return {...receipt(),replayed:true};});
+  assert.equal(data(await compactWrite(client)).replayed,true);
+  assert.equal(calls,1);
+});
+
+for(const code of ['revision_conflict','snapshot_expired','snapshot_used','input_pending'])
+  test(`snapshot ${code} rejects without claiming an edit or advising blind recapture`,async t=>{
+    const client=await connect(t,async()=>({error:true,code,message:'Native rejection'}));
+    const result=await compactWrite(client);
+    assert.equal(result.isError,true);
+    assert.equal(data(result).applied,false);
+    assert.equal(data(result).outcome,'not_applied');
+    assert.equal(data(result).retrySameSnapshot,undefined);
+  });
+
+for(const response of [null,{ready:true},{...receipt(),snapshotId:'60f24d74-10d5-4b1c-a27a-79429de4dec1'},
+  {error:true,applied:true,code:'snapshot_failed',message:'Edited but result unavailable'}])
+  test(`snapshot receipt failures distinguish unknown writes from confirmed mutations (${JSON.stringify(response)})`,async t=>{
+    let calls=0;
+    const client=await connect(t,async()=>{calls++;return response;});
+    const result=await compactWrite(client);
+    assert.equal(result.isError,true);
+    assert.equal(data(result).outcome,response?.applied?'applied':'unknown');
+    assert.equal(data(result).retrySameSnapshot,response?.applied?undefined:true);
+    assert.equal(data(result).readBeforeRetry,response?.applied?true:undefined);
+    assert.equal(calls,1,'No automatic retry');
+  });
+
+test('snapshot transport timeout keeps the outcome unknown and permits the same target retry',async t=>{
+  const client=await connect(t,async()=>{throw new Error('Native request timed out');});
+  const result=await compactWrite(client);
+  assert.equal(data(result).outcome,'unknown');
+  assert.equal(data(result).retrySameSnapshot,true);
+  assert.equal(data(result).applied,undefined);
+});
 
 test('edit tools are model visible with accurate annotations and strict bounded input schemas',async t=>{
   const client=await connect(t,async()=>{assert.fail('Listing tools must not touch native sessions');});

@@ -10,6 +10,18 @@ The scrollbar's 14-pixel hit area stays fixed. Its visible thumb is 6 pixels wid
 
 Every frame refits the existing images and updates the input-method anchor, even when LyX omits unchanged image data. This matters when proportionally resized panels request the same native dimensions. Oversized dialogs remain scrollable; zero-sized panels do not resize the engine. Selection feedback stays on one line so it cannot change editor height.
 
+## Selection editing
+
+**add to chat** requests `selection` with `captureEdit:true`. New engines return the selected passage, revision and an opaque snapshot ID, without serializing full source across the socket, broker, browser and model. Serialization and SHA-256 hashing still happen inside LyX to verify exact source identity. The browser uses that revision directly and attaches the passage once, together with its session ID, snapshot ID and replacement format. Older engines ignore the extra flag and continue to supply legacy context.
+
+`replace_native_lyx_snapshot` makes one clipboard RPC, without a separate state preflight. Native code checks the saved path and exact source revision, reconstructs pointer-free stable positions, and verifies the target before editing. Moving the cursor or selecting another passage does not invalidate it. A changed document, active composition, pending input, or open native dialog rejects the edit. A validation failure restores the previous live cursor and selection. Text and nested math edits use LyX's undo history and do not save the document.
+
+The native process retains at most 32 snapshots for 30 minutes. Only native-issued targets are accepted; they cannot span different inset cells. An identical retry returns the recorded receipt with `replayed:true` without mutating again, even after undo. A different replacement for an already used ID is rejected. A replay describes the past edit, not the current document. Transport uncertainty is reported explicitly; only the identical target and replacement may be retried. Expired or evicted targets require a new selection. Whole-document reads and current-selection replacements remain available for broader work and older engines.
+
+For a small prose edit, compare the attached text and proposed wording, apply the snapshot, and check its receipt. A second full-document read or compilation is unnecessary unless the actual edit requires more context or verification. The native source and rendered PDF remain available for structural, mathematical and rendering changes.
+
+The tool server, panel bundle and native binary all need the update. Existing panels and native processes retain their running versions; rebuilding does not replace an unsaved buffer. Reconnect the plugin and reopen a saved document to activate the complete workflow. Never terminate an existing unsaved editor just to refresh capabilities.
+
 ## Session feedback
 
 Failed frame requests or ambiguous editing errors show a persistent Retry control and pause new input, Save, and add to chat. Retry requests current state through a frame read, or waits for a check already in progress; it does not restart the native process or replay an uncertain edit. Safe pointer/preedit cancellation may finish after recovery. Duplicate attachments preserve the current view, and stale responses from an older session cannot replace it.
@@ -40,6 +52,8 @@ Direct reuse of an already configured desktop profile also requires a stable con
 
 ## Verification
 
+- `test/native.model-edit.integration.mjs` exercises the actual MCP stdio server, isolated broker and native engine. It verifies snapshot edits after cursor movement or a different selection, one-step undo/redo, safe replay after undo, conflicting edits, expiry by eviction, input-method and modeless-dialog guards, nested formula targets, and matching font behavior for forward/backward selections. Original files and the production broker registry remain unchanged. In one local demo run, full versus compact read replies were 8,801 versus 1,248 bytes; edit replies were 8,741 versus 958 bytes. The compact write took 1.4 ms through the local test MCP transport; that does not measure Codex model response or desktop relay latency.
+- The updated local unit/protocol suite passed 316 tests. Targeted native model-edit, guarded-edit and IME integration tests also passed. The compact browser context flow is covered through the real bundled frontend with controlled host responses; activation in an already running Codex panel still requires the refresh described above.
 - `test/native.panel-style.integration.mjs` compiles a real Qt widget test covering eight direction/orientation configurations, dragging, page clicks, keyboard input, wheel input and hover geometry.
 - `test/native-app-session.test.mjs` runs the bundled frontend with controlled host replies, including missing initial context, startup errors, verified-exit reopening, duplicate clicks, stale responses, queued-edit suppression, historical chat context, connection Retry, unchanged frames after resizing and collapsed panels.
 - `test/native-broker-open.test.mjs` checks live-owner routing and slow-session ordering; `test/native-startup.test.mjs` uses a real child process and Unix socket to test readiness deadlines and exit handling.
