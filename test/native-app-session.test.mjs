@@ -76,6 +76,23 @@ test('viewport-sized editor leaves host height control with the host',async()=>{
   assert.equal(ui.appOptions.autoResize,false,'Content-height reporting would feed native frame height back into the host');
 });
 
+test('the actual paste handler requests native recovery only on a capable connection',async()=>{
+  for(const supported of [true,false]){
+    const calls=[];
+    const ui=await harness(async request=>{
+      calls.push(request);return {...state(request.sessionId),uiCapabilities:{externalLyxPaste:supported}};
+    });
+    ui.attach('A');await ui.paint();
+    await ui.get('input').dispatch('paste',{clipboardData:{getData:type=>type==='text/plain'?'x^{2}'
+      :type==='text/html'?'<div id="magicparlabel-1"><math>x²</math></div>':''}});
+    await flush();
+    const pastes=calls.filter(call=>call.method==='clipboard');
+    assert.equal(pastes.length,supported?1:0,'An old service cannot silently insert the formula as plain text');
+    if(supported){assert.equal(pastes[0].sessionId,'A');assert.equal(pastes[0].params.recoverExternalLyx,'required');}
+    else assert.match(ui.get('notice').textContent,/Reload the plugin connection/);
+  }
+});
+
 test('background review refresh leaves enabled controls, cards and scroll position stable',async()=>{
   const gate=deferred();let delayed=false,reads=0;
   const comment={id:'first',quote:'Passage',text:'Comment',resolved:false,anchor:[]};

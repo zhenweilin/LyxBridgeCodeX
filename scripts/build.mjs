@@ -2,6 +2,7 @@ import {build} from 'esbuild';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {spawn} from 'node:child_process';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 await mkdir(resolve(root,'dist'),{recursive:true});
 const result=await build({entryPoints:[resolve(root,'web/app.mjs')],bundle:true,write:false,format:'esm',target:'es2022',minify:true});
@@ -18,3 +19,11 @@ const native = await build({entryPoints:[resolve(root,'web/native-app.mjs')],bun
 const nativeHtml=(await readFile(resolve(root,'web/native.html'),'utf8')).replace('/* NATIVE_JS */',()=>native.outputFiles[0].text.replaceAll('</script','<\\/script'));
 await writeFile(resolve(root,'dist/native.html'),nativeHtml);
 console.log(`Built dist/native.html (${Math.round(Buffer.byteLength(nativeHtml)/1024)} KB)`);
+if(process.platform==='darwin'){
+  await new Promise((done,reject)=>{
+    const child=spawn('/usr/bin/clang',['-fobjc-arc','-framework','AppKit',
+      resolve(root,'native/CodexSystemClipboard.m'),'-o',resolve(root,'dist/lyx-system-clipboard')],{stdio:'inherit'});
+    child.once('error',reject);child.once('exit',code=>code===0?done():reject(new Error(`Clipboard helper build failed (${code})`)));
+  });
+  console.log('Built dist/lyx-system-clipboard');
+}

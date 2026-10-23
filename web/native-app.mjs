@@ -1,6 +1,6 @@
 import {App} from '@modelcontextprotocol/ext-apps';
 import {OpenAIExtensions} from '@openai/mcp-extensions/app';
-import {writeBrowserClipboard,captureBrowserPaste,stageNativeImagePaste} from './native-clipboard.mjs';
+import {writeBrowserClipboard,captureBrowserPaste,stageNativeImagePaste,externalLyxPasteParams} from './native-clipboard.mjs';
 import {createNativeMenuClipboard} from './native-menu-clipboard.mjs';
 import {addNativeSelectionToChat} from './native-chat.mjs';
 import {createNativeInputQueue} from './native-input-queue.mjs';
@@ -112,7 +112,7 @@ async function rpc(method, params = {}, target=descriptor) {
     if(sessionExited(target))throw nativeError({code:'session_exited',message:'This native LyX session has exited'});
     if(method==='input' && params.replyWithState===true && descriptor===target)
       $('surfaces').dataset.inputStateCombined=String(result.stateAfterInput===true);
-    return result;
+    return response._meta?.['lyx/ui']?{...result,uiCapabilities:response._meta['lyx/ui']}:result;
   }
   const response = await fetch(target.url + '/rpc', {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${target.token}`},body:JSON.stringify({sessionId:target.sessionId,method,params})});
   const result = await response.json();
@@ -521,7 +521,7 @@ $('input').addEventListener('paste',event=>{
       return before.capabilities.imagePasteChunks===true?stageNativeImagePaste(prepared,rpc):prepared;
     }});
     else if(payload.copyId||Object.keys(payload.formats??{}).length)
-      queue('clipboard',{action:'paste',...payload});
+      queue('clipboard',{action:'paste',...externalLyxPasteParams(payload,state?.uiCapabilities)});
   }catch(error){notice(error.message);}
 });
 for(const type of ['copy','cut'])$('input').addEventListener(type,event=>{

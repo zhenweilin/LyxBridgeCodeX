@@ -24,6 +24,18 @@ For current-host acceptance, verify the visible plugin panel and its **Connected
 
 Native text/formula editing, undo/redo, clipboard formulas, tables, citations, references, image paste, native dialogs, guarded model edits, and selection context have automated or interactive verification. Manual checks confirmed typing, undo, formula shortcuts, and editable formula paste in the actual Codex panel. Historical verification does not imply that every workflow has been tested on every platform or host release.
 
+### Pasting from desktop LyX on macOS
+
+The browser may omit desktop LyX's `application/x-lyx` clipboard representation. Its remaining HTML can contain MathML or missing preview images, and the plain-text representation contains formula commands without equation boundaries. Passing those representations to the ordinary HTML/text importer can turn editable formulas into literal text.
+
+`npm run build` now also builds the small AppKit helper `dist/lyx-system-clipboard` on macOS, using the installed Apple compiler. During an explicit keyboard paste, the connected MCP service can recover LyX's original native bytes. It first matches the current system clipboard's text to the browser paste event, checks for a clipboard change during the read, and enforces the native 512 KiB limit. It neither watches nor writes the general clipboard. Ordinary external text falls back to its browser formats when no matching LyX payload exists. A recognized LyX paste fails visibly if the native payload cannot be recovered; it does not silently flatten the equations.
+
+This needs both a rebuilt panel and a reconnected MCP service. Restart Codex and reopen the file after saving needed documents to load these components. The existing broker and native engine can keep running; this fix does not require rebuilding or terminating them. The connected panel negotiates the capability with the service. Standalone browser views and other operating systems do not provide this recovery path.
+
+Native formula structure does not supply definitions omitted by the source clipboard. When copying formulas that use document-specific macros, the destination still needs the same macro definitions or macro include file, just as with native LyX-to-LyX paste. For example, `\mbb` and `\brbra` remain macro calls rather than guessed replacements.
+
+Verification uses a uniquely named private macOS pasteboard (including Unicode matching, mismatches and invalid payloads), the actual frontend paste handler and MCP relay, and separate native source/target engines. The HTML/text-only baseline loses three formula insets; native recovery preserves all three, their subscripts, prose and Unicode, and one undo restores the entire target. This automated path does not establish that a currently mounted Codex panel has reloaded the new connection.
+
 ## Limits
 
 - Native widgets retain a Fusion base with macOS-inspired flat chrome and arrowless rounded scrollbars. The full Macintosh widget style crashes under the tested offscreen platform, so this is not a Cocoa window. Native scrollbar hit regions match their appearance; the wider fixed gutter remains draggable without layout changes on hover.

@@ -36,6 +36,18 @@ export function readBrowserClipboard(data){
   return {formats};
 }
 
+// Web hosts may retain only desktop LyX's text/HTML. Neither representation
+// reliably preserves equations, especially formulas using document macros.
+export function externalLyxPasteParams(payload,capabilities){
+  if(payload.copyId||payload.formats?.['application/x-lyx']||!payload.formats?.['text/plain'])return payload;
+  const html=payload.formats['text/html']?decodeClipboardText(payload.formats['text/html']):'';
+  const fromLyx=/\bid\s*=\s*["']magicparlabel-\d+["']/i.test(html)
+    || /<meta\b[^>]*\bcontent\s*=\s*["']LyX\s[\d.]+["']/i.test(html);
+  if(capabilities?.externalLyxPaste===true)return {...payload,recoverExternalLyx:fromLyx?'required':'prefer'};
+  if(fromLyx)throw new Error('This plugin connection cannot preserve formulas copied from desktop LyX yet. Reload the plugin connection and reopen this panel.');
+  return payload;
+}
+
 // Capture File objects while the browser's real paste event owns access to its
 // data. Byte reading happens later inside the already reserved native queue slot.
 export function captureBrowserPaste(data){

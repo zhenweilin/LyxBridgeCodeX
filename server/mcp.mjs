@@ -8,6 +8,7 @@ import {createNativeEditor,editSchemas,nativeSessionId} from '../lib/native-edit
 import {renderFile,renderLyx} from '../lib/lyx.mjs';
 import {openNativeDocument,reopenNativeDocument,callNativeRpc,nativeRpcMethods} from '../lib/native-broker-client.mjs';
 import {imageNativeRequestBytes} from '../lib/native-rpc-limits.mjs';
+import {recoverExternalLyxFormats,systemLyxClipboardAvailable} from '../lib/system-clipboard.mjs';
 
 const uri='ui://lyx-preview/viewer';
 const viewerURL=new URL('../dist/viewer.html',import.meta.url);
@@ -30,7 +31,8 @@ function nativeUiError(error){
   return{isError:true,content:[{type:'text',text:message}],_meta:{'lyx/rpc':result}};
 }
 
-export function createServer({openNative=openNativeDocument,reopenNative=reopenNativeDocument,rpc=callNativeRpc}={}){
+export function createServer({openNative=openNativeDocument,reopenNative=reopenNativeDocument,rpc=callNativeRpc,
+  externalClipboard=recoverExternalLyxFormats,externalClipboardAvailable=systemLyxClipboardAvailable}={}){
   const editor=createNativeEditor({rpc});
   const server=new McpServer({name:'lyx-preview',version:'0.3.0'});
   new OpenAIExtensions(server);
@@ -75,6 +77,14 @@ export function createServer({openNative=openNativeDocument,reopenNative=reopenN
       const options={signal:context.mcpReq?.signal};
       const params={...args.params};
       if(replyWithState)delete params.replyWithState;
+      if(params.recoverExternalLyx!==undefined){
+        if(args.method!=='clipboard'||params.action!=='paste'||!['prefer','required'].includes(params.recoverExternalLyx)
+          ||params.copyId||params.image)throw new Error('Invalid external LyX paste request');
+        if(!externalClipboardAvailable)throw new Error('Reload the plugin connection to enable native LyX paste.');
+        const required=params.recoverExternalLyx==='required';
+        delete params.recoverExternalLyx;
+        params.formats=await externalClipboard(params.formats,{...options,required});
+      }
       let result=await rpc({...args,params},options);
       editor.observe(args.sessionId,result);
       if(replyWithState && !result.error){
@@ -88,7 +98,7 @@ export function createServer({openNative=openNativeDocument,reopenNative=reopenN
         // Only this service knows which editing tools it has registered.
         result={...result,modelCapabilities:{selectionSnapshots:true}};
       }
-      return{content:[],_meta:{'lyx/rpc':result}};
+      return{content:[],_meta:{'lyx/rpc':result,'lyx/ui':{externalLyxPaste:externalClipboardAvailable}}};
     }
     catch(error){return nativeUiError(error);}
   });
