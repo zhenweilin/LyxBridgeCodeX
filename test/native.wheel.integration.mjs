@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,writeFile,mkdtemp,mkdir} from 'node:fs/promises';
+import {readFile,writeFile,mkdtemp,mkdir,cp,lstat} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {inflateSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {NativeSession} from '../lib/native-session.mjs';
+import {nativeUserProfile} from '../lib/native-profile.mjs';
 import {normalizeNativeWheel,nativeWheelQueueOptions} from '../web/native-wheel.mjs';
 import {createNativeInputQueue} from '../web/native-input-queue.mjs';
 
@@ -66,6 +67,12 @@ for(const speed of [1,2])test(`browser wheel units and pinch use native metrics 
   assert.notEqual(fixture,original.toString());
   await writeFile(path,fixture);
   const profile=join(directory,'profile');await mkdir(profile);
+  // Reuse detected TeX tools/classes, while replacing preferences below. A
+  // full first-run TeX scan is unrelated to wheel handling and can exceed the
+  // bridge startup deadline on a busy host.
+  await cp(await nativeUserProfile(),profile,{recursive:true,filter:async source=>{
+    const info=await lstat(source);return info.isDirectory()||info.isFile()||info.isSymbolicLink();
+  }}).catch(error=>{if(error.code!=='ENOENT')throw error;});
   await writeFile(join(profile,'preferences'),`\\mouse_wheel_speed ${speed}\n\\scroll_wheel_zoom alt\n\\cursor_follows_scrollbar false\n`);
   const session=new NativeSession(),records=[];
   const oldProfile=process.env.LYX_USER_PROFILE;

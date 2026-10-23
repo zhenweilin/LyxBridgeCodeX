@@ -1,7 +1,7 @@
 import {createServer} from 'node:http';
-import {readFile, writeFile, mkdir, chmod, realpath} from 'node:fs/promises';
+import {readFile, writeFile, mkdir, realpath,rename,unlink} from 'node:fs/promises';
 import {randomBytes, timingSafeEqual} from 'node:crypto';
-import {resolve} from 'node:path';
+import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {NativeSession} from '../lib/native-session.mjs';
 import {NativeClipboardStore} from '../lib/native-clipboard.mjs';
@@ -9,10 +9,11 @@ import {nativeRequestBytes,ordinaryNativeRequestBytes,imageNativeRequestBytes} f
 const root = fileURLToPath(new URL('..', import.meta.url));
 export const brokerFile = resolve(root, '.native/broker.json');
 const defaultPort = 0;
+const failure=(message,code)=>Object.assign(new Error(message),{code});
 
 export async function startBroker({demoPath,port=defaultPort,registryPath=brokerFile} = {}) {
   const token = randomBytes(32).toString('hex');
-  const sessions = new Map(), opening = new Map(), paths = new Map();
+  const sessions = new Map(), exitedSessions=new Map(),opening = new Map(), paths = new Map();
   const clipboard=new NativeClipboardStore();
   let url = `http://127.0.0.1:${port}`;
   async function open(path) {
@@ -26,15 +27,56 @@ export async function startBroker({demoPath,port=defaultPort,registryPath=broker
       // Native File Open, tab switches and Save As change the active buffer.
       // A descriptor cached at startup does not prove which file is now shown.
       const unavailable=new Map();
-      for (const [id,session] of sessions) {
-        if(session.exited){sessions.delete(id);continue;}
+      async function matches(session) {
+        if(session.exited){
+          exitedSessions.set(session.id,{path:session.path,lastKnownPath:session.lastKnownPath,exited:session.exited});
+          sessions.delete(session.id);return false;
+        }
         let current;
         try{current=await session.call('state');}
-        catch(error){unavailable.set(id,error);continue;}
-        if(current.ready && await realpath(current.path).catch(()=>resolve(current.path))===path)
-          return descriptor(session);
+        catch(error){unavailable.set(session.id,error);return false;}
+        if(current.ready)return await realpath(current.path).catch(()=>resolve(current.path))===path;
+        // Reopening while its first recovery prompt is still unanswered must
+        // return that same interactive session, not switch an unloaded buffer
+        // or create a competing engine for the same file.
+        return session.startupPending===true && session.path===path
+          && current.uiReady===true && current.interactionRequired===true;
       }
-      const previous=sessions.get(paths.get(path));
+      // Reopening an already connected document must not wait for unrelated
+      // engines. Verify its current buffer before trusting the path index.
+      let previous=sessions.get(paths.get(path));
+      if(previous && await matches(previous))return descriptor(previous);
+      if(previous?.exited)previous=undefined;
+
+      // Engines are independent: a slow or disconnected one must not delay a
+      // healthy matching editor. A negative result still waits for every probe;
+      // otherwise a merely slow owner could be replaced and its edits hidden.
+      const candidates=[...sessions.values()].filter(session=>session!==previous);
+      const found=await new Promise(resolveMatch=>{
+        let remaining=candidates.length;
+        if(!remaining){resolveMatch(undefined);return;}
+        for(const session of candidates){
+          void matches(session).then(match=>{
+            if(match)resolveMatch(session);
+          }).catch(error=>{
+            unavailable.set(session.id,error);
+          }).finally(()=>{
+            if(!--remaining)resolveMatch(undefined);
+          });
+        }
+      });
+      if(found)return descriptor(found);
+      // Save As can establish ownership without ever indexing the new path.
+      // A lost state connection does not make that live editor's last known
+      // document safe to replace, including when reopening an older dead owner.
+      for(const session of sessions.values()){
+        if(session.exited||!unavailable.has(session.id))continue;
+        for(const candidatePath of new Set([session.lastKnownPath,session.path])){
+          if(typeof candidatePath!=='string'||!candidatePath)continue;
+          if(await realpath(candidatePath).catch(()=>resolve(candidatePath))===path)
+            throw failure('A live LyX editor may still contain this document; reconnect it before opening another editor','session_unavailable');
+        }
+      }
       if(previous){
         // Preserve a disconnected process that may contain unsaved work. Its
         // failure must not prevent unrelated documents opening in other sessions.
@@ -56,6 +98,14 @@ export async function startBroker({demoPath,port=defaultPort,registryPath=broker
     opening.set(path,pending);
     try{return await pending;}
     finally{if(opening.get(path)===pending)opening.delete(path);}
+  }
+  async function reopen(sessionId) {
+    const session=sessions.get(sessionId)??exitedSessions.get(sessionId);
+    if(!session)throw failure('LyX session not found','session_not_found');
+    // A failed socket or timed-out state request is not proof of process exit.
+    // Preserve that process and any unsaved edits until its exit is observed.
+    if(!session.exited)throw failure('The original LyX editor has not exited; retry its connection instead','session_unavailable');
+    return open(session.lastKnownPath??session.path);
   }
   const server = createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -93,10 +143,15 @@ export async function startBroker({demoPath,port=defaultPort,registryPath=broker
       for await (const part of req) {body += part; if (Buffer.byteLength(body) > transportLimit) throw new Error('The request is too large');}
       const data = JSON.parse(body);
       if (req.url === '/open') return res.end(JSON.stringify(await open(data.path)));
+      if (req.url === '/reopen') return res.end(JSON.stringify(await reopen(data.sessionId)));
       if (req.url !== '/rpc') {res.writeHead(404); return res.end();}
       if(Buffer.byteLength(body)>nativeRequestBytes(data.method,data.params))throw new Error('The request is too large');
       const session = sessions.get(data.sessionId);
-      if (!session) throw new Error('LyX session not found');
+      if (!session) {
+        if(exitedSessions.has(data.sessionId))throw failure('The native LyX editor has exited','session_exited');
+        throw failure('LyX session not found','session_not_found');
+      }
+      if(session.exited)throw failure('The native LyX editor has exited','session_exited');
       if (!['frame', 'input', 'selection', 'state', 'command', 'dispatch','clipboard'].includes(data.method)) throw new Error('Unknown operation');
       const params=data.params??{};
       if(data.method==='clipboard'&&params.action==='paste'&&params.copyId){
@@ -105,18 +160,28 @@ export async function startBroker({demoPath,port=defaultPort,registryPath=broker
       const operation=data.method==='clipboard'&&['copy','cut'].includes(params.action)&&params.copyId
         ? clipboard.copy(params.copyId,()=>session.call(data.method,params))
         : session.call(data.method,params);
-      const result = await operation;
+      let result;
+      try{result=await operation;}
+      catch(error){if(session.exited)error.code='session_exited';throw error;}
       res.end(JSON.stringify(result));
-    } catch(error) {res.writeHead(400);res.end(JSON.stringify({error: error.message}));}
+    } catch(error) {res.writeHead(400);res.end(JSON.stringify({error:error.message,
+      ...(typeof error.code==='string'&&/^[a-z_]{1,64}$/.test(error.code)?{code:error.code}:{}),
+      ...(error.applied===true?{applied:true}:{})}));}
   });
   await new Promise((done, reject) => {server.once('error', reject); server.listen(port, '127.0.0.1', done);});
   port=server.address().port;url=`http://127.0.0.1:${port}`;
   if(registryPath){
     await mkdir(resolve(root, '.native'), {recursive: true});
-    await writeFile(registryPath, JSON.stringify({url, token, pid: process.pid}), {mode: 0o600});
-    await chmod(registryPath, 0o600);
+    const staging=join(dirname(registryPath),`.lyx-broker-${process.pid}-${randomBytes(8).toString('hex')}.tmp`);
+    try{
+      await writeFile(staging,JSON.stringify({url,token,pid:process.pid}),{mode:0o600,flag:'wx'});
+      await rename(staging,registryPath);
+    }catch(error){
+      const closed=new Promise(done=>server.close(done));server.closeAllConnections();await closed;
+      throw error;
+    }finally{await unlink(staging).catch(()=>{});}
   }
-  return {server, open, sessions, url};
+  return {server, open, reopen, sessions, url};
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -16,7 +16,7 @@ test('real LyX: browser-confirmed Space and letters complete native layout short
   const start=frontend.indexOf('const keys='),end=frontend.indexOf("$('input').addEventListener('blur'");
   assert.ok(start>=0 && end>start);
   const browserInput={value:'',addEventListener:(type,handler)=>handlers.set(type,handler)};
-  runInNewContext(`let composing=false;${frontend.slice(start,end)}`,{
+  runInNewContext(`let composing=false;const connectionPhase='connected';${frontend.slice(start,end)}`,{
     $:()=>browserInput,createNativeIme,state:undefined,
     queue:(method,params)=>{assert.equal(method,'input');inputs.push(params);},
     modifiers:event=>({shift:event.shiftKey,alt:event.altKey,ctrl:event.ctrlKey,meta:event.metaKey}),

@@ -3,6 +3,7 @@
 #include <config.h>
 #include "CodexBridge.h"
 #include "CodexFramePng.h"
+#include "CodexPanelStyle.h"
 #include "CodexSelectionEdit.h"
 #include "GuiApplication.h"
 #include "GuiView.h"
@@ -70,18 +71,6 @@
 
 namespace lyx { namespace frontend {
 namespace {
-// Keep Qt's native menu scrolling and hit testing. Fusion otherwise folds a
-// long menu into columns, which can be wider than the embedded editor panel.
-class PanelMenuStyle : public QProxyStyle {
-public:
-    explicit PanelMenuStyle(QString const & base) : QProxyStyle(base) {}
-    int styleHint(StyleHint hint, QStyleOption const * option = nullptr,
-        QWidget const * widget = nullptr, QStyleHintReturn * data = nullptr) const override {
-        if (hint == SH_Menu_Scrollable) return 1;
-        return QProxyStyle::styleHint(hint, option, widget, data);
-    }
-};
-
 QJsonArray position(DocIterator const & it)
 {
     QJsonArray result;
@@ -99,6 +88,7 @@ class CodexBridge : public QObject {
     QHash<QString, QPointer<QWidget>> surfaces_;
     QPointer<QWidget> pressed_;
     bool contextPress_ = false;
+    bool dismissedMenuPress_ = false;
     bool textPreviewInitialized_ = false;
     int pendingInput_ = 0;
     QPointer<QWidget> compositionTarget_;
@@ -399,10 +389,31 @@ class CodexBridge : public QObject {
     QJsonObject state(bool includeSource) {
         auto * bv = bufferView();
         if (!bv) {
+            auto * main = root();
+            QWidget * prompt = QApplication::activeModalWidget();
+            if (!prompt || prompt == main || !prompt->isVisible()) {
+                prompt = nullptr;
+                for (auto * widget : QApplication::topLevelWidgets())
+                    if (widget != main && widget->isVisible() && widget->isModal()) {
+                        prompt = widget;
+                        break;
+                    }
+            }
+            QString promptTitle = prompt ? prompt->windowTitle() : QString();
+            // Qt's macOS QMessageBox may intentionally have no window title.
+            // Its text still identifies the decision shown in the frame.
+            if (promptTitle.isEmpty())
+                if (auto * message = qobject_cast<QMessageBox *>(prompt))
+                    promptTitle = message->text();
             // File New/Open and their text fields still work in an empty LyX
             // window. Report their input state without retaining a closed
             // document's selection, path, or save status in the web panel.
             QJsonObject result{{"ready", false}, {"hasSelection", false}, {"selection", QString()},
+                // A recovery/load prompt can precede setBuffer(). It must be
+                // shown to the user before document readiness is possible.
+                {"uiReady", main && (main->isVisible() || prompt)},
+                {"interactionRequired", main && prompt},
+                {"interactionTitle", promptTitle},
                 {"selectionStart", QJsonArray()}, {"selectionEnd", QJsonArray()},
                 {"capabilities", QJsonObject{{"pointerCancel", true}, {"editSelection", true}, {"compositionGuard", true}, {"imagePaste", true}, {"imagePasteChunks", true}, {"wheelInput", true}}},
                 {"inputPending", pendingInput_ > 0}};
@@ -424,6 +435,7 @@ class CodexBridge : public QObject {
         buffer.checkExternalModification();
         auto & cursor = bv->cursor();
         QJsonObject result{{"ready", true}, {"path", toqstr(buffer.fileName().absFileName())},
+            {"uiReady", true}, {"interactionRequired", false},
             {"capabilities", QJsonObject{{"pointerCancel", true}, {"editSelection", true}, {"compositionGuard", true}, {"imagePaste", true}, {"imagePasteChunks", true}, {"wheelInput", true}}},
             {"inputPending", pendingInput_ > 0},
             {"modified", !buffer.isClean()},
@@ -741,7 +753,7 @@ class CodexBridge : public QObject {
         QRect const panel(main->mapToGlobal(QPoint()), main->size());
         if (QApplication::platformName() == "offscreen") {
             if (!panelStyle_ || QApplication::style() != panelStyle_) {
-                panelStyle_ = new PanelMenuStyle(QApplication::style()->objectName());
+                panelStyle_ = new CodexPanelStyle(QApplication::style()->objectName());
                 QApplication::setStyle(panelStyle_);
             }
             QScreen * screen = main->screen();
@@ -758,7 +770,8 @@ class CodexBridge : public QObject {
         QList<QWidget *> widgets{main};
         for (auto * w : QApplication::topLevelWidgets())
             if (w != main && w->isVisible() && !qobject_cast<GuiView *>(w)
-                && w->windowType() != Qt::ToolTip) widgets.append(w);
+                && w->windowType() != Qt::ToolTip
+                && w->windowType() != Qt::SplashScreen) widgets.append(w);
         // Qt positions combo popups against the offscreen virtual screen,
         // which is independent of the browser panel. A popup can otherwise
         // begin above the rendered root (hiding Standard) or extend below it.
@@ -845,6 +858,7 @@ class CodexBridge : public QObject {
         return result;
     }
     void cancelPointer(QPointer<QWidget> target) {
+        dismissedMenuPress_ = false;
         if (!target) return;
         // A browser interruption is not a click: never release a menu item or
         // a document inset, which could activate it. End each native gesture
@@ -876,10 +890,101 @@ class CodexBridge : public QObject {
             QApplication::sendEvent(target, &ungrab);
         }
     }
+    void sendPointer(QPointer<QWidget> target, QMouseEvent & event, bool contextRelease) {
+        // Decide when the event is delivered: an earlier queued press can open
+        // a popup after this event has already arrived from the browser.
+        if (event.type() == QEvent::MouseButtonPress) {
+            dismissedMenuPress_ = false;
+            if (auto * menu = qobject_cast<QMenu *>(QApplication::activePopupWidget())) {
+                if (target && !qobject_cast<QMenu *>(target->window())
+                    && !qobject_cast<QMenuBar *>(target.data())) {
+                    // Offscreen events bypass QPA's popup mouse grab. Let the
+                    // native menu close its entire chain on an outside press.
+                    // Consume this gesture rather than click through to text,
+                    // a toolbar action, or a new context menu on release.
+                    dismissedMenuPress_ = true;
+                    QPoint const local = menu->mapFromGlobal(event.globalPos());
+                    QMouseEvent outside(event.type(), QPointF(local), QPointF(local),
+                        event.screenPos(), event.button(), event.buttons(), event.modifiers());
+                    QApplication::sendEvent(menu, &outside);
+                    return;
+                }
+            }
+        } else if (dismissedMenuPress_) {
+            if (event.type() == QEvent::MouseButtonRelease) dismissedMenuPress_ = false;
+            return;
+        }
+        if (!target) return;
+        if (event.type() == QEvent::MouseButtonPress) {
+            // Popup menus borrow their parent window's activation. Activating
+            // the popup itself can make LyX reject the selected action.
+            if (target->window()->windowType() != Qt::Popup)
+                QApplication::setActiveWindow(target->window());
+            // Synthetic events need the normal click-focus traversal.
+            QWidget * focusTarget = target;
+            QPoint focusPosition = event.pos();
+            while (focusTarget) {
+                QWidget * proxy = focusTarget;
+                while (proxy->focusProxy()) proxy = proxy->focusProxy();
+                auto clickFocus = [](QWidget * widget) {
+                    return (widget->focusPolicy() & Qt::ClickFocus) == Qt::ClickFocus;
+                };
+                if (focusTarget->isEnabled() && focusTarget->rect().contains(focusPosition)
+                    && clickFocus(focusTarget) && clickFocus(proxy)) {
+                    focusTarget->setFocus(Qt::MouseFocusReason);
+                    break;
+                }
+                if (focusTarget->isWindow() || proxy->hasFocus()) break;
+                focusPosition += focusTarget->pos();
+                focusTarget = focusTarget->parentWidget();
+            }
+        }
+        QApplication::sendEvent(target, &event);
+        if (contextRelease && target) {
+            QContextMenuEvent context(QContextMenuEvent::Mouse, event.pos(),
+                event.globalPos(), event.modifiers());
+            QApplication::sendEvent(target, &context);
+        }
+    }
+    void openHelpMenu() {
+        // Cocoa supplies Command-? for ordinary macOS windows. The offscreen
+        // panel must open its own menu, using a stable upstream menu identity.
+        if (compositionActive_ || QApplication::activeModalWidget()) return;
+        auto * view = app_->currentView();
+        auto * bar = view ? view->menuBar() : nullptr;
+        if (!bar) return;
+        for (auto * action : bar->actions()) {
+            auto * menu = action->menu();
+            if (!menu || menu->property("codexMenuName").toString() != "help") continue;
+            if (menu->isVisible()) return;
+            for (auto * widget : QApplication::topLevelWidgets())
+                if (auto * popup = qobject_cast<QMenu *>(widget))
+                    if (popup->isVisible()) popup->close();
+            QApplication::setActiveWindow(view);
+            menu->popup(bar->mapToGlobal(bar->actionGeometry(action).bottomLeft()));
+            for (auto * item : menu->actions()) {
+                if (item->isEnabled() && item->isVisible() && !item->isSeparator()) {
+                    menu->setActiveAction(item);
+                    break;
+                }
+            }
+            return;
+        }
+    }
     void input(QJsonObject const & p) {
         QWidget * main = root();
         if (!main) return;
         QString type = p["type"].toString();
+#ifdef Q_OS_MAC
+        if ((type == "keydown" || type == "keyup") && p["meta"].toBool()
+            && !p["ctrl"].toBool() && !p["alt"].toBool()
+            && (p["key"].toInt() == Qt::Key_Question
+                || (p["key"].toInt() == Qt::Key_Slash && p["shift"].toBool()))) {
+            if (type == "keydown" && !p["repeat"].toBool())
+                postAction([this] {openHelpMenu();});
+            return;
+        }
+#endif
         if (type == "pointercancel") {
             QPointer<QWidget> target = pressed_;
             pressed_.clear();
@@ -1009,33 +1114,6 @@ class CodexBridge : public QObject {
                     // This offscreen process receives synthetic input instead.
                     contextPress_ = contextPress_ || (p["button"].toInt() == 0 && p["ctrl"].toBool());
 #endif
-                    // Native popup menus borrow their parent window's activation;
-                    // activating the popup itself can make LyX reject the action
-                    // for having a different current view when it is clicked.
-                    if (target->window()->windowType() != Qt::Popup)
-                        QApplication::setActiveWindow(target->window());
-                    // Posted mouse events are not spontaneous, so Qt skips its
-                    // normal click-focus traversal. A scroll area's viewport
-                    // is NoFocus; its parent/proxy owns keyboard focus instead.
-                    QWidget * focusTarget = target;
-                    QPoint focusPosition = local;
-                    while (focusTarget) {
-                        QWidget * proxy = focusTarget;
-                        while (proxy->focusProxy()) proxy = proxy->focusProxy();
-                        auto clickFocus = [](QWidget * widget) {
-                            return (widget->focusPolicy() & Qt::ClickFocus) == Qt::ClickFocus;
-                        };
-                        if (focusTarget->isEnabled() && focusTarget->rect().contains(focusPosition)
-                            && clickFocus(focusTarget) && clickFocus(proxy)) {
-                            focusTarget->setFocus(Qt::MouseFocusReason);
-                            break;
-                        }
-                        // Preserve an existing focus and never cross a native
-                        // window boundary, including popup menus and dialogs.
-                        if (focusTarget->isWindow() || proxy->hasFocus()) break;
-                        focusPosition += focusTarget->pos();
-                        focusTarget = focusTarget->parentWidget();
-                    }
                 }
                 Qt::MouseButtons pressedButtons = buttons(p["buttons"].toInt());
                 if (contextPress_ && pressedButtons.testFlag(Qt::LeftButton)) {
@@ -1044,13 +1122,12 @@ class CodexBridge : public QObject {
                 }
                 QMouseEvent event(eventType, QPointF(local), QPointF(target->window()->mapFromGlobal(global)), QPointF(global),
                     type == "pointermove" ? Qt::NoButton : contextPress_ ? Qt::RightButton : button(p["button"].toInt()), pressedButtons, m);
-                postInput(target, event);
+                QPointer<QWidget> guardedTarget(target);
+                bool const contextRelease = type == "pointerup" && contextPress_;
+                postAction([this, guardedTarget, event, contextRelease]() mutable {
+                    sendPointer(guardedTarget, event, contextRelease);
+                });
                 if (type == "pointerup") {
-                    // GuiWorkArea records the appropriate native menu during
-                    // right-button press, but requires this separate QPA event
-                    // to show it. Post after release to keep menu exec modal-safe.
-                    if (contextPress_)
-                        postInput(target, QContextMenuEvent(QContextMenuEvent::Mouse, local, global, m));
                     pressed_.clear();
                     contextPress_ = false;
                 }

@@ -9,7 +9,7 @@ const source = resolve(process.argv[2] ?? resolve(root,`.native/lyx-source-${lyx
 const commit=execFileSync('git',['-C',source,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
 if(commit!==lyxUpstream.commit)throw new Error(`Only the pinned LyX ${lyxUpstream.version} commit is supported.`);
 const qt = resolve(source, 'src/frontends/qt');
-for (const file of ['CodexBridge.h', 'CodexBridge.cpp','CodexFramePng.h','CodexSelectionEdit.h','CodexSelectionEdit.cpp','CodexPseudocode.h','CodexPseudocode.cpp']) await copyFile(resolve(root, 'native', file), resolve(qt, file));
+for (const file of ['CodexBridge.h', 'CodexBridge.cpp','CodexFramePng.h','CodexPanelStyle.h','CodexSelectionEdit.h','CodexSelectionEdit.cpp','CodexPseudocode.h','CodexPseudocode.cpp']) await copyFile(resolve(root, 'native', file), resolve(qt, file));
 let cpp = await readFile(resolve(qt, 'GuiApplication.cpp'), 'utf8');
 if (!cpp.includes('#include "CodexBridge.h"')) cpp = '#include "CodexBridge.h"\n' + cpp;
 if (!cpp.includes('#include "CodexPseudocode.h"')) cpp = '#include "CodexPseudocode.h"\n' + cpp;
@@ -159,6 +159,16 @@ if (!viewSource.includes(cocoaMenuFocusCheck)) {
   viewSource = viewSource.replace(menuFocusCheck, cocoaMenuFocusCheck);
 }
 await writeFile(resolve(qt, 'GuiView.cpp'), viewSource);
+// Keep native menu identities available to offscreen system shortcuts without
+// matching translated titles or constructing duplicate popup menus.
+const menusPath=resolve(qt,'Menus.cpp');
+let menusSource=await readFile(menusPath,'utf8');
+if(!menusSource.includes('setProperty("codexMenuName", name);')){
+  const anchor='\td->name = name;\n\tsetTitle(name);';
+  if(!menusSource.includes(anchor))throw new Error('Cannot locate native menu identity');
+  menusSource=menusSource.replace(anchor,anchor+'\n\tsetProperty("codexMenuName", name);');
+  await writeFile(menusPath,menusSource);
+}
 // Export the command identity, never infer clipboard behavior from translated
 // menu labels. The property has no effect on normal LyX action dispatch.
 let actionSource = await readFile(resolve(qt, 'Action.cpp'), 'utf8');

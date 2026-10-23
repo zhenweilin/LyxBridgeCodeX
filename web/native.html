@@ -1,14 +1,47 @@
 <!doctype html>
 <html lang="en" data-lyx-editor-version="0.3.0"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LyX Editor</title>
 <style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;font:13px system-ui;color:#222;background:#e7e7e7}body{display:flex;flex-direction:column}
-header,footer{display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fafafa;flex:none}header{border-bottom:1px solid #ccc}header strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}button{font:inherit;padding:6px 12px;border:1px solid #bdbdbd;background:white;border-radius:5px;cursor:pointer}button:disabled{opacity:.45;cursor:default}#add{background:#175e4d;color:white;border-color:#175e4d}#viewport{position:relative;flex:1;min-height:0;overflow:auto;background:#dedede}#surfaces{position:relative;transform-origin:top left;touch-action:none}#surfaces img{position:absolute;user-select:none;-webkit-user-drag:none}footer{border-top:1px solid #ccc}#status{flex:1;min-width:0}#connection{display:block;color:#777;font-size:11px;margin-top:3px}#notice{position:absolute;bottom:65px;left:12px;right:12px;z-index:1000;background:#fff7df;border:1px solid #d6b567;padding:10px;border-radius:5px;white-space:pre-wrap}#notice:empty{display:none}#input{position:absolute;top:30px;left:30px;width:1px;height:20px;opacity:.01;border:0;padding:0;resize:none;z-index:100;pointer-events:none;white-space:pre;overflow:hidden;caret-color:transparent}#loading{padding:30px;color:#666}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font:13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#242426;background:#f3f3f5;color-scheme:light}
+body{display:flex;flex-direction:column}
+header,footer{display:flex;align-items:center;gap:10px;padding:9px 12px;background:#f5f5f7;flex:none}
+header{border-bottom:1px solid #d8d8dc}
+header strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-weight:600}
+#saved{font-size:11px;color:#74747b;white-space:nowrap}
+button{font:inherit;padding:6px 12px;border:1px solid #c9c9cf;background:linear-gradient(#fff,#fafafa);color:#242426;border-radius:7px;box-shadow:0 1px 2px #0000000a;cursor:pointer;white-space:nowrap}
+button:hover:not(:disabled){background:#fff;border-color:#afafb7}
+button:active:not(:disabled){background:#e9e9ed;box-shadow:inset 0 1px 2px #0000000a}
+button:focus-visible{outline:2px solid #007aff;outline-offset:2px}
+button:disabled{opacity:.45;cursor:default;box-shadow:none}
+#add{background:#007aff;color:white;border-color:#0072ed}
+#add:hover:not(:disabled){background:#006ee6;border-color:#0066d7}
+#add:active:not(:disabled){background:#0062ce}
+#viewport{position:relative;flex:1;min-height:0;overflow:auto;background:#ededf0}
+#viewport::-webkit-scrollbar{width:10px;height:10px}
+#viewport::-webkit-scrollbar-track,#viewport::-webkit-scrollbar-corner{background:#f3f3f5}
+#viewport::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:8px;background:#aaaab1;background-clip:padding-box}
+#viewport::-webkit-scrollbar-thumb:hover{background-color:#87878f}
+#viewport::-webkit-scrollbar-thumb:active{background-color:#6e6e76}
+#surfaces{position:relative;transform-origin:top left;touch-action:none}
+#surfaces img{position:absolute;user-select:none;-webkit-user-drag:none}
+footer{border-top:1px solid #d8d8dc}
+#status{flex:1;min-width:0}
+#selection,#connection{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#selection{line-height:18px}
+#connection{color:#777780;font-size:11px;line-height:14px;margin-top:3px}
+#connection-banner{position:absolute;top:12px;left:12px;right:12px;z-index:1001;display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #ddcfae;border-radius:8px;background:#fff9eb;color:#645337;box-shadow:0 2px 8px #00000014}
+#connection-banner[hidden]{display:none}
+#connection-message{flex:1;min-width:0;overflow-wrap:anywhere}
+#notice{position:absolute;bottom:65px;left:12px;right:12px;z-index:1000;background:#fff9eb;border:1px solid #ddcfae;color:#645337;padding:10px;border-radius:8px;box-shadow:0 2px 8px #0000000a;white-space:pre-wrap}
+#notice:empty{display:none}
+#input{position:absolute;top:30px;left:30px;width:1px;height:20px;opacity:.01;border:0;padding:0;resize:none;z-index:100;pointer-events:none;white-space:pre;overflow:hidden;caret-color:transparent}
+#loading{padding:30px;color:#74747b}
 /* An offscreen native caret must not grow the browser's scrollable area.
    Unlike overflow:hidden, clip cannot scroll the relay when it gains focus. */
 #ime-layer{position:absolute;inset:0;overflow:clip;pointer-events:none;z-index:100}
 </style></head><body>
-<header><strong id="filename">LyX Editor</strong><span id="saved">Connecting</span><button id="save">Save</button></header>
-<main id="viewport"><div id="loading">Starting native LyX…</div><div id="surfaces" role="application" aria-label="Native LyX editing area"></div><div id="ime-layer"><textarea id="input" wrap="off" aria-label="LyX keyboard input" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea></div></main>
+<header><strong id="filename">LyX Editor</strong><span id="saved">Connecting</span><button id="save" disabled>Save</button></header>
+<main id="viewport"><div id="loading">Connecting to Codex…</div><div id="surfaces" role="application" aria-label="Native LyX editing area"></div><div id="ime-layer"><textarea id="input" wrap="off" aria-label="LyX keyboard input" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea></div><div id="connection-banner" role="status" aria-live="polite" hidden><span id="connection-message"></span><button id="retry">Retry</button><button id="reopen" hidden>Reopen editor</button></div></main>
 <footer><div id="status"><span id="selection">Select text or a formula in LyX</span><small id="connection">Connecting to this chat</small></div><button id="add" disabled>add to chat</button></footer>
 <div id="notice" role="status" aria-live="polite"></div>
 <script type="module">/* NATIVE_JS */</script></body></html>

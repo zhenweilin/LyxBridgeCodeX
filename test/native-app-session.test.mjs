@@ -12,8 +12,8 @@ const bundle=await build({entryPoints:['web/native-app.mjs'],bundle:true,write:f
     builder.onLoad({filter:/.*/,namespace:'test-host'},()=>({contents:`
       export class App {
         constructor(){ __host.app=this; }
-        addEventListener(){}
-        async connect(){}
+        addEventListener(type,callback){ __host.listeners.set(type,callback); }
+        async connect(){ await __host.connect(); }
         callServerTool(request){ return __host.call(request); }
       }
       export class OpenAIExtensions { constructor(){return __host.extensions;} }
@@ -23,29 +23,39 @@ const deferred=()=>{let resolve;const promise=new Promise(yes=>{resolve=yes;});r
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 
 function element(){
-  const listeners=new Map();
+  const listeners=new Map(),pointers=new Set();
   return {style:{},dataset:{},children:[],value:'',scrollLeft:0,scrollTop:0,
     addEventListener(type,callback){listeners.set(type,[...(listeners.get(type)??[]),callback]);},
     dispatch(type,extra={}){return Promise.all((listeners.get(type)??[]).map(callback=>callback({type,target:this,preventDefault(){},...extra})));},
     setAttribute(){},append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},remove(){},focus(){},
+    setPointerCapture(id){pointers.add(id);},hasPointerCapture(id){return pointers.has(id);},releasePointerCapture(id){pointers.delete(id);},
     insertBefore(item){this.children.push(item);},querySelector(){return null;},
     getBoundingClientRect(){return {left:0,top:0,width:800,height:600};},
+    get clientWidth(){return this.getBoundingClientRect().width;},
+    get clientHeight(){return this.getBoundingClientRect().height;},
   };
 }
 function state(sessionId){return {ready:true,path:`/${sessionId}.lyx`,modified:false,hasSelection:false,
   selection:'',selectionStart:[],selectionEnd:[],inputMethod:{enabled:false},
   capabilities:{pointerCancel:true}};}
 
-async function harness(call){
+async function harness(call,{connect=async()=>{},open=async()=>({}),reopen=async()=>({}),standaloneDescriptor,fetch}={}){
   const nodes=new Map(),get=id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);};
   const document={hidden:false,body:element(),getElementById:get,createElement:element,querySelector:element,
     addEventListener(){},removeEventListener(){}};
   const contexts=[],drafts=[];
-  const host={call:async request=>({_meta:{'lyx/rpc':await call(request.arguments)}}),extensions:{
+  const host={connect,listeners:new Map(),call:async request=>{
+    if(request.name==='start_native_lyx')return open();
+    if(request.name==='reopen_native_lyx')return reopen(request.arguments);
+    const result=await call(request.arguments);
+    return result?.isError===true?result:{_meta:{'lyx/rpc':result}};
+  },extensions:{
     modelContext:{async update(context){contexts.push(context);return {updateId:'accepted'};}},
     message:{async send(draft){drafts.push(draft);return {};}}}};
   const timers=new Map();let timerId=0,clock=0;
-  await vm.runInNewContext(`(async()=>{${bundle.outputFiles[0].text}\n})()`,{__host:host,document,window:{parent:{},addEventListener(){}},
+  const window={parent:{},addEventListener(){}};
+  if(standaloneDescriptor){window.parent=window;window.__LYX_NATIVE__=standaloneDescriptor;}
+  await vm.runInNewContext(`(async()=>{${bundle.outputFiles[0].text}\n})()`,{__host:host,document,window,fetch,
     crypto:webcrypto,TextEncoder,TextDecoder,atob,btoa,Image:element,performance:{now:()=>clock},
     setTimeout:(callback,delay=0)=>{timers.set(++timerId,{callback,at:clock+delay});return timerId;},clearTimeout:id=>timers.delete(id)});
   await flush();
@@ -55,7 +65,9 @@ async function harness(call){
     timers.delete(id);clock=timer.at;timer.callback();await flush();};
   const wheel=async(deltaY=1)=>get('surfaces').dispatch('wheel',{deltaMode:0,deltaX:0,deltaY,clientX:200,clientY:200,
     target:{closest:()=>({dataset:{surface:'main'},getBoundingClientRect:()=>({left:0,top:0})})}});
-  return {get,attach,commit,contexts,drafts,flush,paint,wheel};
+  return {get,attach,commit,contexts,drafts,flush,paint,wheel,
+    result:value=>host.app.ontoolresult(value),
+    toolinput:args=>host.listeners.get('toolinput')?.({arguments:args})};
 }
 
 test('the real frontend coalesces slow wheel RPCs without crossing typing, chat or session barriers',async()=>{
@@ -288,4 +300,431 @@ test('closing the last native document clears its selection, filename, and save 
   assert.equal(ui.get('save').disabled,true);
   assert.equal(ui.get('add').disabled,true);
   assert.equal(ui.get('selection').textContent,'Open or create a document using the File menu');
+});
+
+test('connection loss blocks new edits and chat actions until a read-only retry recovers the current session',async()=>{
+  let broken=false,opens=0;const calls=[];
+  const ui=await harness(async request=>{
+    calls.push(request);
+    if(broken && request.method==='frame')throw new Error('Connection lost');
+    return {...state(request.sessionId),hasSelection:true,selection:'Selected text',source:'Source',
+      ...(request.method==='input'?{stateAfterInput:true}:{}),modified:false};
+  },{open:async()=>{opens++;assert.fail('An existing session must not be restarted');}});
+  ui.attach('A');await ui.paint();await flush();
+  broken=true;await ui.paint();
+  assert.equal(ui.get('connection-banner').hidden,false);
+  assert.match(ui.get('connection-message').textContent,/Editing is paused.*Connection lost/);
+  assert.equal(ui.get('saved').textContent,'Reconnecting…');
+  assert.equal(ui.get('save').disabled,true);assert.equal(ui.get('add').disabled,true);
+  assert.equal(ui.get('input').readOnly,true);
+  const before=calls.length;
+  await ui.commit('do not send');await ui.get('save').dispatch('click');
+  await ui.get('add').dispatch('click');await ui.wheel();
+  assert.equal(calls.length,before,'Known-disconnected input cannot enter the native queue');
+  await ui.get('retry').dispatch('click');
+  assert.equal(calls.at(-1).method,'frame');
+  assert.equal(ui.get('connection-banner').hidden,false,'Failed retries leave persistent feedback');
+  broken=false;await ui.get('retry').dispatch('click');
+  assert.equal(opens,0);assert.equal(ui.get('connection-banner').hidden,true);
+  assert.equal(ui.get('input').readOnly,false);assert.equal(ui.get('saved').textContent,'Saved');
+  assert.equal(ui.get('save').disabled,false);assert.equal(ui.get('add').disabled,false);
+  await ui.commit('new input after recovery');await flush();
+  assert.deepEqual(calls.filter(call=>call.method==='input').map(call=>call.params.text),['new input after recovery']);
+});
+
+test('a failed mutation is never replayed by automatic recovery or Retry',async()=>{
+  const calls=[];
+  const ui=await harness(async request=>{
+    calls.push(request);
+    if(request.method==='input')throw new Error('Transport failed after the write may have happened');
+    return state(request.sessionId);
+  });
+  ui.attach('A');await ui.paint();await ui.commit('once only');await flush();
+  assert.equal(ui.get('save').disabled,true);
+  await ui.paint();await ui.get('retry').dispatch('click');
+  assert.equal(calls.filter(call=>call.method==='input').length,1);
+  assert.equal(ui.get('connection-banner').hidden,true);
+});
+
+for(const message of ['connection_closed','Native request timed out'])
+test(`an MCP error envelope (${message}) pauses editing without replaying the mutation`,async()=>{
+  const calls=[];
+  const ui=await harness(async request=>{
+    calls.push(request);
+    if(request.method==='input')return {isError:true,content:[{type:'text',text:message}],
+      _meta:{'lyx/rpc':{error:true,message}}};
+    return state(request.sessionId);
+  });
+  ui.attach('A');await ui.paint();await ui.commit('uncertain mutation');await flush();
+  assert.equal(ui.get('input').readOnly,true);assert.equal(ui.get('save').disabled,true);
+  assert.match(ui.get('connection-message').textContent,new RegExp(message));
+  await ui.commit('blocked while disconnected');await ui.get('retry').dispatch('click');
+  assert.equal(calls.filter(call=>call.method==='input').length,1);
+  assert.equal(ui.get('connection-banner').hidden,true);
+});
+
+test('connection loss cancels active pointer and IME gestures without committing a candidate',async()=>{
+  let broken=false;const calls=[];
+  const ui=await harness(async request=>{
+    calls.push(request);
+    if(broken)throw new Error('Disconnected');
+    return {...state(request.sessionId),serial:1,width:800,height:600,
+      ...(request.method==='input'?{stateAfterInput:true}:{}),
+      ...(request.method==='frame'?{surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,png:''}]}:{})};
+  });
+  ui.attach('A');await ui.paint();
+  const image={dataset:{surface:'main'},getBoundingClientRect:()=>({left:0,top:0})};
+  await ui.get('surfaces').dispatch('pointerdown',{pointerId:1,button:0,buttons:1,clientX:10,clientY:10,target:{closest:()=>image}});
+  await ui.get('input').dispatch('compositionstart');
+  await ui.get('input').dispatch('compositionupdate',{data:'候选'});await flush();
+  broken=true;await ui.paint();await flush();await flush();
+  const inputs=calls.filter(call=>call.method==='input').map(call=>call.params);
+  assert.equal(inputs.filter(input=>input.type==='pointercancel').length,1);
+  assert.equal(inputs.filter(input=>input.type==='composition' && input.text==='').length,1);
+  assert.equal(inputs.filter(input=>input.type==='commit').length,0);
+  assert.equal(ui.get('surfaces').hasPointerCapture(1),false);
+  assert.equal(ui.get('input').readOnly,true);
+  await ui.get('input').dispatch('compositionend',{data:'候选'});
+  assert.equal(calls.filter(call=>call.method==='input' && call.params.type==='commit').length,0);
+  broken=false;await ui.get('retry').dispatch('click');await flush();await flush();
+  const recovered=calls.filter(call=>call.method==='input').map(call=>call.params);
+  assert.equal(recovered.filter(input=>input.type==='pointercancel').length,2,
+    'A failed, idempotent cancellation is completed after reconnection');
+  assert.equal(recovered.filter(input=>input.type==='composition' && input.text==='').length,2);
+  assert.equal(recovered.filter(input=>input.type==='commit').length,0);
+  assert.equal(ui.get('input').readOnly,false);
+});
+
+test('late errors from an old session cannot block a newly attached editor',async()=>{
+  const gate=deferred();
+  const ui=await harness(async request=>{
+    if(request.sessionId==='A' && request.method==='frame'){await gate.promise;throw new Error('Old editor failed');}
+    return state(request.sessionId);
+  });
+  ui.attach('A');await ui.paint();ui.attach('B');gate.resolve();await flush();
+  assert.equal(ui.get('filename').textContent,'B.lyx');
+  assert.equal(ui.get('connection-banner').hidden,true);
+  assert.equal(ui.get('saved').textContent,'Connecting');
+  await ui.paint();assert.equal(ui.get('saved').textContent,'Saved');
+  assert.equal(ui.get('input').readOnly,false);
+});
+
+test('startup failures persist and Retry opens the file after the host becomes available',async()=>{
+  let opens=0;
+  const ui=await harness(async request=>state(request.sessionId),{open:async()=>{
+    opens++;
+    if(opens===1)throw new Error('Native engine is unavailable');
+    return {_meta:{'lyx/native':{sessionId:'A',path:'/A.lyx'}}};
+  }});
+  ui.toolinput({file:'/A.lyx'});await flush();
+  assert.equal(ui.get('connection-banner').hidden,false);
+  assert.match(ui.get('connection-message').textContent,/Native engine is unavailable/);
+  assert.equal(ui.get('saved').textContent,'Could not open editor');
+  await ui.get('retry').dispatch('click');
+  assert.equal(opens,2);assert.equal(ui.get('filename').textContent,'A.lyx');
+  assert.equal(ui.get('connection-banner').hidden,true);
+  await ui.paint();assert.equal(ui.get('saved').textContent,'Saved');
+});
+
+test('a failed host handshake can be retried before opening the requested file',async()=>{
+  let connects=0,opens=0;
+  const ui=await harness(async request=>state(request.sessionId),{
+    connect:async()=>{if(++connects===1)throw new Error('Host handshake failed');},
+    open:async()=>{opens++;return {_meta:{'lyx/native':{sessionId:'A',path:'/A.lyx'}}};},
+  });
+  ui.toolinput({file:'/A.lyx'});
+  assert.equal(ui.get('connection-banner').hidden,false);
+  await ui.get('retry').dispatch('click');
+  assert.equal(connects,2);assert.equal(opens,1);
+  assert.equal(ui.get('filename').textContent,'A.lyx');
+});
+
+for(const fail of [false,true])test(`a late startup ${fail?'failure':'result'} cannot replace a newer attachment`,async()=>{
+  const gate=deferred();let opens=0;
+  const ui=await harness(async request=>state(request.sessionId),{open:async()=>{
+    opens++;await gate.promise;if(fail)throw new Error('Old open failed');
+    return {_meta:{'lyx/native':{sessionId:'A',path:'/A.lyx'}}};
+  }});
+  ui.toolinput({file:'/A.lyx'});ui.toolinput({file:'/A.lyx'});
+  assert.equal(opens,1,'Repeated requests share the pending open');
+  ui.attach('B');await ui.paint();gate.resolve();await flush();
+  assert.equal(ui.get('filename').textContent,'B.lyx');
+  assert.equal(ui.get('saved').textContent,'Saved');
+  assert.equal(ui.get('connection-banner').hidden,true);
+});
+
+test('duplicate attachment notifications retain the loaded editor and full selection title',async()=>{
+  const selected='A long selected passage with enough characters to be abbreviated in the footer';
+  const ui=await harness(async request=>({...state(request.sessionId),hasSelection:true,selection:selected,
+    serial:1,width:800,height:600,surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,png:''}]}));
+  ui.attach('A');await ui.paint();
+  const image=ui.get('surfaces').children[0];
+  assert.equal(ui.get('selection').title,selected);
+  assert.match(ui.get('selection').textContent,/…$/);
+  ui.attach('A');
+  assert.equal(ui.get('surfaces').children[0],image);
+  assert.equal(ui.get('loading').hidden,true);
+  assert.equal(ui.get('saved').textContent,'Saved');
+  assert.equal(ui.get('add').disabled,false);
+});
+
+test('resizing a narrow panel refits unchanged native pixels and preserves pointer coordinates',async()=>{
+  const calls=[];let frames=0;
+  const ui=await harness(async request=>{
+    calls.push(request);
+    if(request.method!=='frame')return state(request.sessionId);
+    return {...state(request.sessionId),serial:1,width:480,height:720,
+      ...(++frames===1?{surfaces:[{id:'main',main:true,x:0,y:0,width:480,height:720,png:''}]}:{})};
+  });
+  let bounds={left:0,top:0,width:400,height:600};
+  ui.get('viewport').getBoundingClientRect=()=>bounds;
+  ui.attach('A');await ui.paint();
+  const image=ui.get('surfaces').children[0];
+  assert.equal(ui.get('surfaces').style.zoom,String(400/480));
+  bounds={left:0,top:0,width:360,height:540};
+  await ui.paint();
+  assert.deepEqual(calls.filter(call=>call.method==='frame').map(call=>[call.params.width,call.params.height]),
+    [[480,720],[480,720]],'Both panel sizes reuse the same native frame');
+  assert.equal(ui.get('surfaces').children[0],image,'A resize should not discard decoded pixels');
+  assert.equal(ui.get('surfaces').style.zoom,'0.75');
+  image.getBoundingClientRect=()=>({left:10,top:20,width:360,height:540});
+  await ui.get('surfaces').dispatch('dblclick',{target:{closest:()=>image},clientX:190,clientY:110,button:0,buttons:0});
+  await flush();
+  const input=calls.find(call=>call.method==='input');
+  assert.equal(input.params.x,240);assert.equal(input.params.y,120);
+});
+
+test('a collapsed panel does not resize its native editor to minimum dimensions',async()=>{
+  const calls=[];
+  const ui=await harness(async request=>{calls.push(request);return state(request.sessionId);});
+  ui.get('viewport').getBoundingClientRect=()=>({left:0,top:0,width:0,height:0});
+  ui.attach('A');await ui.paint();
+  assert.equal(calls.length,0);
+  assert.equal(ui.get('connection-banner').hidden,true);
+});
+
+test('a startup recovery dialog remains interactive before the document is ready',async()=>{
+  const calls=[];let choicePending=true;
+  const ui=await harness(async request=>{
+    calls.push(request);
+    if(request.method==='input')choicePending=false;
+    if(!choicePending)return {...state(request.sessionId),modified:true};
+    return {...state(request.sessionId),ready:false,path:undefined,uiReady:true,
+      interactionRequired:true,interactionTitle:'Load backup?',serial:1,width:800,height:600,
+      surfaces:[{id:'recovery',main:false,x:120,y:160,width:500,height:240,png:''}]};
+  });
+  ui.attach('A');await ui.paint();
+  assert.equal(ui.get('filename').textContent,'A.lyx');
+  assert.equal(ui.get('saved').textContent,'Action required');
+  assert.equal(ui.get('saved').title,'Load backup?');
+  assert.equal(ui.get('save').disabled,true);assert.equal(ui.get('add').disabled,true);
+  assert.equal(ui.get('connection-banner').hidden,true);
+  assert.equal(ui.get('input').readOnly,false,'The dialog can receive native keyboard input');
+  assert.equal(ui.get('surfaces').children.length,1,'The prompt is painted before a document exists');
+  await ui.get('input').dispatch('keydown',{key:'Escape',code:'Escape',preventDefault(){}});
+  await flush();
+  assert.equal(calls.find(call=>call.method==='input').params.key,0x1000000);
+  assert.equal(ui.get('saved').textContent,'Unsaved');
+  assert.equal(ui.get('save').disabled,false);
+});
+
+test('a connected panel waits for file context without claiming that a native editor has started',async()=>{
+  let opens=0;const calls=[];
+  const ui=await harness(async request=>{calls.push(request);return state(request.sessionId);},{open:async()=>{
+    opens++;return {_meta:{'lyx/native':{sessionId:'A',path:'/A.lyx'}}};
+  }});
+  assert.equal(ui.get('saved').textContent,'Waiting for file');
+  assert.match(ui.get('loading').textContent,/Open a \.lyx file in this chat/);
+  assert.equal(ui.get('connection').textContent,'Chat connected · Waiting for a file');
+  assert.equal(ui.get('save').disabled,true);assert.equal(ui.get('input').readOnly,true);
+  ui.result({content:[]});await flush();
+  assert.equal(ui.get('connection-banner').hidden,true,'The file entrypoint has a legitimate empty result');
+  assert.equal(opens,0);assert.equal(calls.length,0);
+  ui.toolinput({file:{name:'A.lyx',resourceUri:'codex-resource://file/A'}});await flush();
+  assert.equal(opens,1);await ui.paint();
+  assert.equal(ui.get('filename').textContent,'A.lyx');
+  assert.equal(ui.get('connection').textContent,'Connected to this chat');
+});
+
+for(const result of [
+  {isError:true,content:[{type:'text',text:'Initial native open failed'}]},
+  {_meta:{'lyx/native':{path:'/A.lyx'}}},
+])test(`initial ${result.isError?'tool errors':'malformed descriptors'} show persistent feedback and accept delayed valid context`,async()=>{
+  const ui=await harness(async request=>state(request.sessionId));
+  ui.result(result);
+  assert.equal(ui.get('connection-banner').hidden,false);
+  assert.equal(ui.get('saved').textContent,'Could not open editor');
+  assert.match(ui.get('connection-message').textContent,/Initial native open failed|did not return an editor session/);
+  assert.equal(ui.get('reopen').hidden,true);
+  ui.result({structuredContent:{sessionId:'A',path:'/A.lyx'}});await ui.paint();
+  assert.equal(ui.get('connection-banner').hidden,true);assert.equal(ui.get('saved').textContent,'Saved');
+  ui.result(result);
+  assert.equal(ui.get('connection-banner').hidden,true,'A late startup error cannot block an attached editor');
+});
+
+test('a delayed file input recovers after an initial result error without replaying or guessing a path',async()=>{
+  let opens=0;
+  const ui=await harness(async request=>state(request.sessionId),{open:async()=>{
+    opens++;return {_meta:{'lyx/native':{sessionId:'A',path:'/A.lyx'}}};
+  }});
+  ui.result({isError:true,content:[{type:'text',text:'Host file context was unavailable'}]});
+  await ui.get('retry').dispatch('click');
+  assert.equal(opens,0);assert.equal(ui.get('saved').textContent,'Waiting for file');
+  ui.toolinput({file:{name:'A.lyx',resourceUri:'codex-resource://file/A'}});await flush();await ui.paint();
+  assert.equal(opens,1);assert.equal(ui.get('saved').textContent,'Saved');
+});
+
+const exitReply=()=>({isError:true,content:[{type:'text',text:'Native LyX has exited'}],
+  _meta:{'lyx/rpc':{error:true,message:'Native LyX has exited',code:'session_exited'}}});
+
+test('verified exit preserves the last frame and offers one explicit reopen without changing historical chat context',async()=>{
+  let exited=false,reopens=0;const gate=deferred(),calls=[];
+  const ui=await harness(async request=>{
+    calls.push(request);
+    if(exited && request.sessionId==='A')return exitReply();
+    return {...state(request.sessionId),hasSelection:request.sessionId==='A',selection:'Old passage',source:'Source',
+      serial:1,width:800,height:600,surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,png:''}]};
+  },{reopen:async args=>{
+    assert.equal(args.sessionId,'A');reopens++;await gate.promise;
+    return {_meta:{'lyx/native':{sessionId:'B',path:'/B.lyx'}}};
+  }});
+  ui.attach('A');await ui.paint();await ui.get('add').dispatch('click');
+  const image=ui.get('surfaces').children[0];
+  assert.equal(ui.contexts.length,1);
+  exited=true;await ui.paint();
+  assert.equal(ui.get('surfaces').children[0],image);
+  assert.equal(ui.get('reopen').hidden,false);assert.equal(ui.get('retry').hidden,true);
+  assert.equal(ui.get('saved').textContent,'Editor stopped');
+  assert.match(ui.get('connection-message').textContent,/load the backup, load the original, or cancel/);
+  assert.equal(ui.get('add').dataset.contextAttached,undefined);
+  const before=calls.length;
+  await ui.get('retry').dispatch('click');await ui.commit('blocked');await ui.get('save').dispatch('click');
+  await ui.get('add').dispatch('click');
+  assert.equal(calls.length,before);assert.equal(reopens,0,'No automatic process replacement');
+  const reopening=ui.get('reopen').dispatch('click');await ui.get('reopen').dispatch('click');
+  assert.equal(reopens,1);assert.equal(ui.get('reopen').disabled,true);
+  gate.resolve();await reopening;await ui.paint();
+  assert.equal(ui.get('filename').textContent,'B.lyx');assert.equal(ui.get('connection-banner').hidden,true);
+  assert.equal(ui.get('add').disabled,true);assert.equal(ui.get('add').dataset.contextAttached,undefined);
+  assert.equal(ui.contexts.length,1,'Explicit historical context remains attached');assert.equal(ui.drafts.length,0);
+  assert.match(ui.get('notice').textContent,/Previous chat selection is unchanged/);
+  ui.attach('A');assert.equal(ui.get('filename').textContent,'B.lyx','A late old descriptor cannot revive an exited engine');
+});
+
+for(const code of ['timeout','session_not_found',undefined])
+test(`ambiguous ${code??'untyped'} errors never expose process replacement, even when their text mentions session_exited`,async()=>{
+  let broken=false,reopens=0;const calls=[];
+  const ui=await harness(async request=>{
+    calls.push(request);
+    return broken?{isError:true,content:[{type:'text',text:'session_exited may have occurred'}],
+      _meta:{'lyx/rpc':{error:true,message:'session_exited may have occurred',...(code?{code}:{})}}}:state(request.sessionId);
+  },{reopen:async()=>{reopens++;assert.fail('Unknown outcomes must never replace a native engine');}});
+  ui.attach('A');await ui.paint();broken=true;await ui.paint();
+  assert.equal(ui.get('reopen').hidden,true);assert.equal(ui.get('retry').hidden,false);
+  const before=calls.length;await ui.get('reopen').dispatch('click');assert.equal(reopens,0);
+  await ui.get('retry').dispatch('click');
+  assert.equal(calls.length,before+1);assert.equal(calls.at(-1).method,'frame');
+});
+
+test('confirmed exit is latched before the native input queue can send its next waiting edit',async()=>{
+  const gate=deferred(),calls=[];
+  const ui=await harness(async request=>{
+    calls.push(request);
+    if(request.sessionId==='A' && request.method==='input'){await gate.promise;return exitReply();}
+    return state(request.sessionId);
+  },{reopen:async()=>({_meta:{'lyx/native':{sessionId:'B',path:'/B.lyx'}}})});
+  ui.attach('A');await ui.paint();
+  const first=ui.commit('outcome uncertain'),second=ui.commit('waiting edit');
+  gate.resolve();await first;await second;await flush();
+  assert.deepEqual(calls.filter(call=>call.method==='input').map(call=>call.params.text),['outcome uncertain']);
+  await ui.get('reopen').dispatch('click');await ui.paint();
+  await ui.commit('new edit');await flush();
+  assert.deepEqual(calls.filter(call=>call.method==='input').map(call=>[call.sessionId,call.params.text]),
+    [['A','outcome uncertain'],['B','new edit']]);
+});
+
+for(const fail of [false,true])test(`a late reopen ${fail?'failure':'success'} cannot replace a newer attachment`,async()=>{
+  const gate=deferred();
+  const ui=await harness(async request=>request.sessionId==='A'?exitReply():state(request.sessionId),{
+    reopen:async()=>{await gate.promise;if(fail)throw new Error('Old reopen failed');
+      return {_meta:{'lyx/native':{sessionId:'B',path:'/B.lyx'}}};},
+  });
+  ui.attach('A');await ui.paint();const reopening=ui.get('reopen').dispatch('click');
+  ui.attach('C');await ui.paint();gate.resolve();await reopening;
+  assert.equal(ui.get('filename').textContent,'C.lyx');assert.equal(ui.get('saved').textContent,'Saved');
+  assert.equal(ui.get('connection-banner').hidden,true);assert.equal(ui.get('notice').textContent,'');
+});
+
+test('reopen failure retains the stopped frame and allows another explicit attempt',async()=>{
+  let reopens=0;
+  const ui=await harness(async()=>exitReply(),{reopen:async()=>{
+    reopens++;return {isError:true,content:[{type:'text',text:'No confirmed recovery path'}]};
+  }});
+  ui.attach('A');await ui.paint();await ui.get('reopen').dispatch('click');
+  assert.equal(reopens,1);assert.equal(ui.get('reopen').hidden,false);assert.equal(ui.get('reopen').disabled,false);
+  assert.equal(ui.get('saved').textContent,'Editor stopped');
+  assert.match(ui.get('notice').textContent,/No confirmed recovery path/);
+  await ui.get('reopen').dispatch('click');assert.equal(reopens,2);
+});
+
+test('standalone recovery uses only the authenticated existing broker reopen endpoint',async()=>{
+  const requests=[];let exited=false;
+  const ui=await harness(async()=>assert.fail('Standalone UI cannot use host RPC'),{
+    standaloneDescriptor:{sessionId:'A',path:'/A.lyx',url:'http://127.0.0.1:12345',token:'test-secret'},
+    fetch:async(url,options)=>{
+      const body=JSON.parse(options.body);requests.push({url,options,body});
+      assert.equal(options.headers.Authorization,'Bearer test-secret');
+      if(url.endsWith('/reopen'))return {ok:true,json:async()=>({sessionId:'B',path:'/B.lyx',url:'http://127.0.0.1:12345',token:'test-secret'})};
+      if(exited && body.sessionId==='A')return {ok:false,json:async()=>({error:'LyX exited',code:'session_exited'})};
+      return {ok:true,json:async()=>state(body.sessionId)};
+    },
+  });
+  await ui.paint();exited=true;await ui.paint();
+  assert.equal(ui.get('reopen').hidden,false);
+  await ui.get('reopen').dispatch('click');await ui.paint();
+  const reopen=requests.filter(request=>request.url.endsWith('/reopen'));
+  assert.equal(reopen.length,1);assert.deepEqual(reopen[0].body,{sessionId:'A'});
+  assert.equal(ui.get('filename').textContent,'B.lyx');assert.equal(ui.get('connection-banner').hidden,true);
+  assert.equal(ui.contexts.length,0);assert.equal(ui.drafts.length,0);
+});
+
+test('Retry waits for the current automatic frame probe without dispatching a duplicate',async()=>{
+  const gate=deferred();let mode='healthy',frames=0;
+  const ui=await harness(async request=>{
+    if(request.method==='frame'){
+      frames++;
+      if(mode==='failed')throw new Error('Temporary timeout');
+      if(mode==='pending')await gate.promise;
+    }
+    return state(request.sessionId);
+  });
+  ui.attach('A');await ui.paint();mode='failed';await ui.paint();
+  mode='pending';await ui.paint();const before=frames;
+  const retry=ui.get('retry').dispatch('click');await flush();
+  assert.equal(frames,before);assert.equal(ui.get('retry').disabled,true);
+  assert.equal(ui.get('retry').textContent,'Checking…');
+  gate.resolve();await retry;
+  assert.equal(ui.get('retry').disabled,false);assert.equal(ui.get('connection-banner').hidden,true);
+});
+
+test('a confirmed exit during optional clipboard prefetch still exposes recovery',async()=>{
+  const ui=await harness(async request=>request.method==='clipboard'?exitReply():{
+    ...state(request.sessionId),hasSelection:true,selection:'Passage',source:'Source',
+  });
+  ui.attach('A');await ui.paint();await flush();
+  assert.equal(ui.get('reopen').hidden,false);assert.equal(ui.get('saved').textContent,'Editor stopped');
+  assert.equal(ui.get('add').disabled,true);
+});
+
+test('a healthy frame already in flight cannot revive a session after its input reports verified exit',async()=>{
+  const gate=deferred();let waitForFrame=false;
+  const ui=await harness(async request=>{
+    if(request.method==='input')return exitReply();
+    if(request.method==='frame' && waitForFrame)await gate.promise;
+    return state(request.sessionId);
+  });
+  ui.attach('A');await ui.paint();waitForFrame=true;await ui.paint();
+  await ui.commit('exit during pending frame');gate.resolve();await flush();
+  assert.equal(ui.get('reopen').hidden,false);assert.equal(ui.get('saved').textContent,'Editor stopped');
+  assert.equal(ui.get('input').readOnly,true);
 });

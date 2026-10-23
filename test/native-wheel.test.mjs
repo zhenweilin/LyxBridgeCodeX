@@ -54,7 +54,8 @@ test('the shipped handler suppresses unsupported old-engine zoom without turning
   const start=source.indexOf("surfaces.addEventListener('wheel'"),end=source.indexOf('const keys=',start);
   assert.ok(start>=0 && end>start);
   let handler;const calls=[],notices=[];
-  const environment={normalizeNativeWheel,nativeWheelQueueOptions,pointerDrag:{},nativeSurfaces:new Map(),scale:1,state:{capabilities:{}},
+  const environment={normalizeNativeWheel,nativeWheelQueueOptions,pointerDrag:{},nativeSurfaces:new Map(),scale:1,
+    connectionPhase:'connected',state:{capabilities:{}},
     surfaces:{addEventListener:(type,callback)=>{assert.equal(type,'wheel');handler=callback;}},
     queue:(...args)=>calls.push(args),notice:message=>notices.push(message)};
   runInNewContext(source.slice(start,end),environment);
@@ -66,6 +67,13 @@ test('the shipped handler suppresses unsupported old-engine zoom without turning
   handler({...input,ctrlKey:false});assert.equal(calls.length,1,'Old engines still receive ordinary wheel input');
   environment.state={capabilities:{wheelInput:true}};handler(input);
   assert.equal(calls.length,2);assert.ok(calls[1][1].zoomFactor>1);
+  environment.connectionPhase='error';
+  handler(input);handler({...input,ctrlKey:false});
+  assert.equal(calls.length,2,'Disconnected zoom and ordinary scroll do not enter the native queue');
+  assert.equal(prevented,5,'Disconnected gestures cannot zoom or scroll the browser instead');
+  assert.equal(notices.length,1,'The persistent connection UI owns disconnected feedback');
+  environment.connectionPhase='connected';handler({...input,ctrlKey:false});
+  assert.equal(calls.length,3,'Ordinary scrolling resumes after recovery');
 });
 
 const main={main:true,scrollViewport:{x:0,y:100,width:800,height:500}};

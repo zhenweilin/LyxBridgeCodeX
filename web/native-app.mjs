@@ -9,10 +9,15 @@ import {createNativePointerDrag} from './native-pointer-drag.mjs';
 import {nativeImePosition} from './native-ime-position.mjs';
 import {createNativeIme} from './native-ime.mjs';
 import {normalizeNativeWheel,nativeWheelQueueOptions} from './native-wheel.mjs';
+import {nativeViewportSize,fitNativeViewport} from './native-viewport.mjs';
 const $ = id => document.getElementById(id);
-let descriptor, state, app, extensions, frameSerial = -1, pollRunning = false, composing = false, scale = 1, attachmentSerial=0;
+let descriptor, state, app, extensions, frameSerial = -1, pollPromise, composing = false, scale = 1, attachmentSerial=0;
 let inputQueue = Promise.resolve(), noticeTimer;
 let selectionClipboard,clipboardKey,clipboardRequest,editGeneration=0,pendingEdits=0,addingSelection=false;
+let connectionPhase='connecting',retryStartup,retryBusy=false,reopenBusy=false;
+let documentOpened=false;
+const failedCancellations=new Map();
+const exitedSessions=new Set();
 const nativeSurfaces=new Map();
 const nativeInputs=createNativeInputQueue();
 const standalone = window.parent === window;
@@ -32,23 +37,98 @@ function recordRpcTiming(method,elapsed,target){
   $('surfaces').dataset.rpcTimings=JSON.stringify(summary);
 }
 function notice(text) {$('notice').textContent = text;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{$('notice').textContent='';},9000);}
+function nativeError(value,fallback='Native LyX operation failed') {
+  const error=new Error(typeof value?.message==='string'?value.message:typeof value?.error==='string'?value.error:fallback);
+  if(typeof value?.code==='string' && /^[a-z_]{1,64}$/.test(value.code))error.code=value.code;
+  error.confirmedExit=error.code==='session_exited';
+  return error;
+}
+function toolError(result,fallback) {
+  return nativeError(result?._meta?.['lyx/rpc'],result?.content?.find(item=>item.type==='text')?.text||fallback);
+}
+function resultDescriptor(result) {
+  const value=result?._meta?.['lyx/native']??result?.structuredContent;
+  return typeof value?.sessionId==='string' && value.sessionId.length>0
+    && typeof value.path==='string' && value.path.length>0?value:undefined;
+}
+function sessionExited(target=descriptor){return !!target && exitedSessions.has(target.sessionId);}
+function renderConnection() {
+  const unavailable=connectionPhase==='error';
+  const exited=sessionExited();
+  $('connection-banner').hidden=!unavailable;
+  $('retry').hidden=exited;
+  $('retry').disabled=retryBusy;
+  $('retry').textContent=retryBusy?'Checking…':'Retry';
+  $('reopen').hidden=!exited;
+  $('reopen').disabled=reopenBusy;
+  $('reopen').textContent=reopenBusy?'Reopening…':'Reopen editor';
+  $('input').readOnly=unavailable||!descriptor;
+  $('surfaces').setAttribute('aria-disabled',String(unavailable||!descriptor));
+  if(unavailable){
+    $('saved').textContent=exited?'Editor stopped':descriptor?'Reconnecting…':'Could not open editor';
+    $('save').disabled=$('add').disabled=true;
+    $('save').title=$('add').title=exited?'Reopen the editor first':'Wait for the editor to reconnect';
+  }
+}
+function connectionFailed(error,target=descriptor) {
+  if(descriptor!==target)return;
+  const firstFailure=connectionPhase!=='error';
+  if(target && error.confirmedExit===true){
+    exitedSessions.add(target.sessionId);frameLoop.stop();
+    failedCancellations.clear();selectionClipboard=clipboardKey=undefined;
+    nativeMenuClipboard?.invalidateGesture();
+    $('selection').textContent='Reopen the editor before selecting content';
+    $('selection').title=$('selection').textContent;
+    for(const key of ['contextUpdateId','contextVerified','contextAttached'])delete $('add').dataset[key];
+  }
+  connectionPhase='error';
+  const message=sessionExited(target)
+    ? 'LyX has exited. Reopen the editor to continue. If a newer recovery snapshot is available, LyX will let you load the backup, load the original, or cancel.'
+    : descriptor
+    ? `Editing is paused while the connection recovers. ${error.message}`
+    : `The editor could not open. ${error.message}`;
+  // Automatic checks should not repeatedly announce an unchanged error.
+  if($('connection-message').textContent!==message)$('connection-message').textContent=message;
+  renderConnection();
+  if(firstFailure){
+    pendingHover=undefined;
+    // End browser-owned gestures immediately. Cancellation is the sole input
+    // permitted while disconnected: it cannot activate a menu or commit text.
+    pointerDrag.cancel('connection');ime.cancel();
+  }
+}
 async function rpc(method, params = {}, target=descriptor) {
   if (!target) throw new Error('Native LyX is not connected');
+  if(sessionExited(target))throw nativeError({code:'session_exited',message:'This native LyX session has exited'});
   const started=performance.now();
   try{
   if(!standalone){
     const response=await app.callServerTool({name:'native_lyx_rpc',arguments:{sessionId:target.sessionId,method,params}});
-    if(response.isError)throw new Error(response.content?.find(item=>item.type==='text')?.text||'Native LyX operation failed');
+    if(response.isError)throw toolError(response,'Native LyX operation failed');
     const result=response._meta?.['lyx/rpc'];
-    if(!result || result.error)throw new Error(result?.message||result?.error||'The host did not return native LyX state');
+    if(!result)throw new Error('The host did not return native LyX state');
+    if(result.error)throw nativeError(result);
+    if(sessionExited(target))throw nativeError({code:'session_exited',message:'This native LyX session has exited'});
     if(method==='input' && params.replyWithState===true && descriptor===target)
       $('surfaces').dataset.inputStateCombined=String(result.stateAfterInput===true);
     return result;
   }
   const response = await fetch(target.url + '/rpc', {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${target.token}`},body:JSON.stringify({sessionId:target.sessionId,method,params})});
   const result = await response.json();
-  if (!response.ok || result.error) throw new Error(result.message || result.error || 'LyX operation failed');
+  if (!response.ok || result.error) throw nativeError(result,'LyX operation failed');
+  if(sessionExited(target))throw nativeError({code:'session_exited',message:'This native LyX session has exited'});
   return result;
+  }catch(error){
+    // Latch before the input queue starts its next operation, rather than in
+    // the caller's later rejection handler. Never send waiting edits to a
+    // process whose exit has already been confirmed by a structured response.
+    if(error.confirmedExit===true){
+      exitedSessions.add(target.sessionId);
+      // Optional operations such as clipboard prefetch may swallow errors.
+      // A verified exit must still expose recovery and stop the polling loop.
+      connectionFailed(error,target);
+    }
+    throw error;
   }finally{recordRpcTiming(method,performance.now()-started,target);}
 }
 let nativeMenuClipboard;
@@ -67,25 +147,34 @@ function updateInputPosition(next) {
 }
 function showState(next) {
   if (typeof next?.ready!=='boolean') return;
+  if(sessionExited()){renderConnection();return;}
   const wasReady=state?.ready;
   state = next;
   nativeMenuClipboard.update(next);
   if(!next.ready){
     if(wasReady)nativeMenuClipboard.invalidateGesture();
-    $('filename').textContent='No document open';$('filename').title='';
-    $('saved').textContent='';$('saved').title='';
+    const needsDecision=next.interactionRequired===true;
+    const openingPath=needsDecision&&!documentOpened?descriptor?.path:undefined;
+    $('filename').textContent=openingPath?.split('/').at(-1)||(needsDecision?'LyX Editor':'No document open');
+    $('filename').title=openingPath||'';
+    $('saved').textContent=needsDecision?'Action required':'';
+    $('saved').title=needsDecision?(next.interactionTitle||'Choose an option in the native dialog'):'';
     $('save').disabled=$('add').disabled=true;
-    $('save').title='Open or create a document first';
-    $('add').title='Open a document and select text or a formula';
-    $('selection').textContent='Open or create a document using the File menu';
+    $('save').title=needsDecision?'Complete the native dialog before saving':'Open or create a document first';
+    $('add').title=needsDecision?'Complete the native dialog before selecting content':'Open a document and select text or a formula';
+    $('selection').textContent=needsDecision?'Choose an option in the LyX dialog to continue':'Open or create a document using the File menu';
+    $('selection').title=$('selection').textContent;
     prepareClipboard(next);updateInputPosition(next);
+    renderConnection();
     return;
   }
+  documentOpened=true;
   $('filename').textContent=next.path.split('/').at(-1);
   $('filename').title=next.path;
   $('saved').textContent=next.externalModified?'File changed on disk':next.modified?'Unsaved':'Saved';
   $('saved').title=next.externalModified?'LyX detected an external change. Use the native reload or save conflict dialog to preserve your unsaved edits.':'';
   $('selection').textContent=next.hasSelection?`Selected: ${next.selection.slice(0,55)}${next.selection.length>55?'…':''}`:'Select text or a formula in LyX';
+  $('selection').title=next.hasSelection?next.selection:$('selection').textContent;
   const composingNow=composing || next.inputMethod?.composing;
   $('save').disabled=!!composingNow;
   $('save').title=composingNow?'Finish composing text before saving':'';
@@ -96,6 +185,7 @@ function showState(next) {
     : !next.hasSelection||next.clipboardSelection?.kind==='widget'?'Select text or a formula first':'Attach the selection as chat context';
   prepareClipboard(next);
   updateInputPosition(next);
+  renderConnection();
 }
 function clipboardSelection(next){return next?.clipboardSelection??{kind:'document',hasSelection:next?.hasSelection,text:next?.selection,start:next?.selectionStart,end:next?.selectionEnd};}
 function selectionKey(next){const selection=clipboardSelection(next);return selection.hasSelection?JSON.stringify([editGeneration,next.path,selection]):null;}
@@ -124,7 +214,9 @@ function menuPoint(params){
 }
 function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParams}={}) {
   const target=descriptor,menuClipboard=nativeMenuClipboard;
-  if(!target)return Promise.resolve();
+  const cancellation=method==='input' && (params.type==='pointercancel'
+    || params.type==='composition' && params.text==='');
+  if(!target || sessionExited(target) || connectionPhase==='error' && !cancellation)return Promise.resolve();
   frameLoop.request();
   const menuPointer=method==='input' && params.type.startsWith('pointer') && menuPoint(params);
   // Opening a menu preserves the document selection and the prepared MIME.
@@ -163,7 +255,14 @@ function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParam
       }finally{pendingEdits--;}
     }
   },{coalesceKey:coalesceKey?`${attachmentSerial}:${coalesceKey}`:undefined,data:params,merge:mergeParams}).catch(error=>{
-    if(descriptor===target)notice(error.message);
+    if(descriptor===target){
+      notice(error.message);
+      // Tool error envelopes also carry broker timeouts and lost sessions.
+      // Without proof that the mutation was rejected, never send it again.
+      // Gesture cancellation alone is idempotent and safe to finish later.
+      if(cancellation)failedCancellations.set(params.type,params);
+      connectionFailed(error,target);
+    }
   }).finally(()=>{
     if(changesSelection)pendingEdits--;
     // The input acknowledgement precedes Qt's edit; also wake after the state
@@ -173,23 +272,38 @@ function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParam
   return inputQueue;
 }
 function modifiers(e) {return{shift:e.shiftKey,alt:e.altKey,ctrl:e.ctrlKey,meta:e.metaKey};}
-async function poll() {
-  if (!descriptor || pollRunning || document.hidden) return;
-  pollRunning=true;
+function poll() {
+  if(pollPromise)return pollPromise;
+  pollPromise=pollFrame().finally(()=>{pollPromise=undefined;});
+  return pollPromise;
+}
+async function pollFrame() {
+  if (!descriptor || sessionExited() || document.hidden) return;
   const sessionDescriptor=descriptor,generation=editGeneration,editsAtStart=pendingEdits;
   try {
-    const size=$('viewport').getBoundingClientRect();
-    const frame=await rpc('frame',{width:Math.round(size.width),height:Math.round(size.height),serial:frameSerial},sessionDescriptor);
-    if(descriptor!==sessionDescriptor)return;
+    const viewport=$('viewport');
+    // Use the space left by any genuine dialog overflow. Border-box dimensions
+    // include scrollbar gutters and can cause a second, unnecessary scrollbar.
+    const size={width:viewport.clientWidth,height:viewport.clientHeight};
+    const nativeSize=nativeViewportSize(size);
+    if(!nativeSize)return;
+    const frame=await rpc('frame',{...nativeSize,serial:frameSerial},sessionDescriptor);
+    if(descriptor!==sessionDescriptor || sessionExited(sessionDescriptor))return;
+    if(typeof frame.ready!=='boolean')throw new Error('The editor returned an incomplete state');
+    connectionPhase='connected';renderConnection();
+    if(!standalone)$('connection').textContent=extensions?.modelContext?'Connected to this chat':'The host has not provided a chat context interface';
     if(!editsAtStart && !pendingEdits && generation===editGeneration)showState(frame);
+    const cancellations=[...failedCancellations.values()];failedCancellations.clear();
+    for(const params of cancellations)queue('input',params);
+    // Different panel sizes can map to the same native dimensions. Refit even
+    // when LyX reuses the pixels and omits surfaces from this response.
+    const container=$('surfaces');
+    if(frame.width>0 && frame.height>0)
+      scale=fitNativeViewport(container,frame,size.width);
     if (frame.surfaces) {
       frameSerial=frame.serial;
       nativeSurfaces.clear();
       for(const surface of frame.surfaces)nativeSurfaces.set(surface.id,surface);
-      const container=$('surfaces');
-      scale=Math.min(1,size.width/frame.width);
-      container.style.width=`${frame.width}px`;container.style.height=`${frame.height}px`;
-      container.style.transform=`scale(${scale})`;
       const active=new Set();
       for (const surface of frame.surfaces) {
         active.add(surface.id);
@@ -199,14 +313,13 @@ async function poll() {
         Object.assign(image.style,{left:`${surface.x}px`,top:`${surface.y}px`,width:`${surface.width}px`,height:`${surface.height}px`,zIndex:surface.main?'0':'1'});
       }
       for(const image of container.children)if(!active.has(image.dataset.surface))image.remove();
-      updateInputPosition(state);
       $('loading').hidden=true;
     }
+    updateInputPosition(state);
   } catch(error) {
     if(descriptor!==sessionDescriptor)return;
-    notice(error.message);$('saved').textContent='Connection error';throw error;
+    connectionFailed(error,sessionDescriptor);throw error;
   }
-  finally{pollRunning=false;}
 }
 // Request the next active frame promptly. The loop still allows only one
 // frame in flight, so a slower host/encoder cannot build a frame backlog.
@@ -217,14 +330,22 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('resize',()=>frameLoop.request());
 window.addEventListener('blur',()=>{pointerDrag.cancel('blur');ime.cancel();});
 window.addEventListener('pagehide',()=>{pointerDrag.cancel('pagehide');ime.cancel();frameLoop.stop();});
-window.addEventListener('pageshow',()=>{if(descriptor){frameLoop.start();frameLoop.request();}});
+window.addEventListener('pageshow',()=>{if(descriptor&&!sessionExited()){frameLoop.start();frameLoop.request();}});
 function attach(value) {
-  if (!value?.sessionId)return;
+  if (!value?.sessionId || sessionExited(value))return;
+  if(descriptor?.sessionId===value.sessionId && descriptor.url===value.url && descriptor.token===value.token){
+    // Repeated host notifications describe the same live editor. Preserve its
+    // selection, focus and decoded images instead of flashing a loading view.
+    frameLoop.request();return;
+  }
   // Finish already queued input in its original engine. Clear live gestures
   // before changing the descriptor so their cancellation also goes there.
   pointerDrag.cancel('attachment');ime.cancel();pendingHover=undefined;
   nativeMenuClipboard?.destroy();
   descriptor={...value};attachmentSerial++;state=undefined;frameSerial=-1;
+  documentOpened=false;
+  connectionPhase='connecting';retryBusy=false;reopenBusy=false;renderConnection();
+  failedCancellations.clear();
   rpcTimings.clear();
   delete $('surfaces').dataset.rpcTimings;delete $('surfaces').dataset.inputStateCombined;
   const target=descriptor;
@@ -237,10 +358,13 @@ function attach(value) {
   $('filename').textContent=value.path?.split('/').at(-1)||'LyX Editor';
   $('filename').title=value.path||'';
   $('saved').textContent='Connecting';$('saved').title='';
+  if(!standalone)$('connection').textContent='Chat connected · Connecting to editor';
   $('selection').textContent='Select text or a formula in LyX';
+  $('selection').title=$('selection').textContent;
   $('notice').textContent='';
   for(const key of ['contextUpdateId','contextVerified','contextAttached'])delete $('add').dataset[key];
   $('save').disabled=$('add').disabled=true;$('loading').hidden=false;
+  $('loading').textContent='Connecting to the native LyX session…';
   frameLoop.start();frameLoop.request();
 }
 const surfaces=$('surfaces');
@@ -268,6 +392,7 @@ function scheduleHover(params){
   },32);
 }
 for (const type of ['pointerdown','pointermove','pointerup']) surfaces.addEventListener(type,event=>{
+  if(connectionPhase==='error'){event.preventDefault();return;}
   const dragging=pointerDrag.active;
   if(dragging && (dragging.pointerId!==event.pointerId || type==='pointerdown'))return;
   if(!dragging && type==='pointerup')return;
@@ -301,12 +426,14 @@ for(const type of ['pointercancel','lostpointercapture'])surfaces.addEventListen
   pointerDrag.cancel(type,{pointerId:event.pointerId});
 });
 surfaces.addEventListener('dblclick',event=>{
+  if(connectionPhase==='error'){event.preventDefault();return;}
   const image=event.target.closest('img[data-surface]');if(!image)return;
   const r=image.getBoundingClientRect();
   queue('input',{type:'dblclick',surface:image.dataset.surface,x:Math.round((event.clientX-r.left)/scale),y:Math.round((event.clientY-r.top)/scale),button:event.button,buttons:event.buttons,...modifiers(event)});
 });
 surfaces.addEventListener('contextmenu',event=>event.preventDefault());
 surfaces.addEventListener('wheel',event=>{
+  if(connectionPhase==='error'){event.preventDefault();return;}
   const image=event.target.closest('img[data-surface]');if(!image)return;
   const params=normalizeNativeWheel(event,{surface:image.dataset.surface,bounds:image.getBoundingClientRect(),scale});
   if(!params)return;
@@ -325,6 +452,7 @@ const ime=createNativeIme({
   onCompositionChange:value=>{composing=value;if(state)showState(state);},
 });
 for(const type of ['keydown','keyup'])$('input').addEventListener(type,event=>{
+  if(connectionPhase==='error'){event.preventDefault();return;}
   if(ime.key(event)!=='native')return;
   const key=event.key==='Tab' && event.shiftKey?0x1000002
     : keys[event.key] ?? (Array.from(event.key).length===1?event.key.toUpperCase().codePointAt(0):0);
@@ -333,10 +461,14 @@ for(const type of ['keydown','keyup'])$('input').addEventListener(type,event=>{
   queue('input',{type,key,text:Array.from(event.key).length===1?event.key:'',repeat:event.repeat,...modifiers(event)});
 });
 for(const type of ['compositionstart','compositionupdate','compositionend','beforeinput','input'])
-  $('input').addEventListener(type,event=>ime[type](event));
+  $('input').addEventListener(type,event=>{
+    if(connectionPhase==='error'){if(event.cancelable!==false)event.preventDefault();$('input').value='';return;}
+    ime[type](event);
+  });
 $('input').addEventListener('blur',()=>ime.cancel());
 $('input').addEventListener('paste',event=>{
   event.preventDefault();
+  if(connectionPhase==='error')return;
   try{
     const {payload,prepare}=captureBrowserPaste(event.clipboardData);
     if(prepare)queue('clipboard',{action:'paste',...payload},{prepareParams:async(params,{rpc})=>{
@@ -357,6 +489,7 @@ for(const type of ['copy','cut'])$('input').addEventListener(type,event=>{
   // A browser clipboard event must finish synchronously. Never export an old
   // snapshot and later cut a newer selection from the native input queue.
   event.preventDefault();
+  if(connectionPhase==='error')return;
   if(pendingEdits){notice('The selection is still updating. Try copying or cutting again in a moment.');return;}
   const selection=clipboardSelection(state);
   if(!selection.hasSelection)return;
@@ -367,7 +500,7 @@ for(const type of ['copy','cut'])$('input').addEventListener(type,event=>{
 for(const id of ['save','add'])$(id).addEventListener('pointerdown',event=>event.preventDefault());
 $('save').addEventListener('click',()=>queue('command',{command:'buffer-write'}));
 $('add').addEventListener('click',async()=>{
-  if(addingSelection || !descriptor)return;
+  if(addingSelection || !descriptor || connectionPhase==='error')return;
   const target=descriptor;
   addingSelection=true;$('add').disabled=true;
   for(const key of ['contextUpdateId','contextVerified','contextAttached'])delete $('add').dataset[key];
@@ -376,13 +509,52 @@ $('add').addEventListener('click',async()=>{
     // promise alone lets a newer edit run before this continuation resumes.
     const selection=await nativeInputs.enqueue(()=>rpc('selection',{},target));
     const accepted=await addNativeSelectionToChat(selection,extensions,{sessionId:target.sessionId});
-    if(descriptor!==target)return;
+    if(descriptor!==target || sessionExited(target))return;
     $('add').dataset.contextUpdateId=accepted.updateId;
     $('add').dataset.contextVerified=String(accepted.contextVerified);
     $('add').dataset.contextAttached=String(accepted.contextAttached);
     notice('Selection attached as chat context. Your draft is unchanged.');
   }catch(error){if(descriptor===target)notice(error.message);}
   finally{addingSelection=false;if(state)showState(state);}
+});
+$('retry').addEventListener('click',async()=>{
+  if(retryBusy || sessionExited())return;
+  const target=descriptor;
+  retryBusy=true;renderConnection();
+  try{
+    // A lost connection must never restart an engine or replay an edit whose
+    // outcome is unknown. Existing sessions recover through read-only frames.
+    if(target){frameLoop.request();await poll();}
+    else await retryStartup?.({retry:true});
+  }catch(error){connectionFailed(error,target);}
+  finally{if(descriptor===target){retryBusy=false;renderConnection();}}
+});
+$('reopen').addEventListener('click',async()=>{
+  const target=descriptor;
+  if(reopenBusy || !sessionExited(target))return;
+  reopenBusy=true;renderConnection();
+  try{
+    let value;
+    if(standalone){
+      const response=await fetch(target.url+'/reopen',{method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:`Bearer ${target.token}`},
+        body:JSON.stringify({sessionId:target.sessionId})});
+      const result=await response.json();
+      if(!response.ok || result.error)throw nativeError(result,'Could not reopen the editor');
+      value=result;
+    }else{
+      const result=await app.callServerTool({name:'reopen_native_lyx',arguments:{sessionId:target.sessionId}});
+      if(result.isError)throw toolError(result,'Could not reopen the editor');
+      value=resultDescriptor(result);
+    }
+    if(descriptor!==target)return;
+    if(!value?.sessionId || value.sessionId===target.sessionId || sessionExited(value) || !value.path)
+      throw new Error('The host did not return a new editor session');
+    attach(value);
+    if(!standalone)notice('Previous chat selection is unchanged. Select content again to update it.');
+  }catch(error){
+    if(descriptor===target)notice(`Could not reopen the editor. ${error.message}`);
+  }finally{if(descriptor===target){reopenBusy=false;renderConnection();}}
 });
 if(standalone){
   $('connection').textContent='Browser debug view · Not connected to chat. Open the .lyx file in Codex.';
@@ -392,18 +564,64 @@ if(standalone){
 }else{
   app=new App({name:'LyX Native Editor',version:'0.3.0'});
   extensions=new OpenAIExtensions(app);
-  let connected=false,needsFileOpen=false;
-  async function openFile(){try{const result=await app.callServerTool({name:'start_native_lyx',arguments:{}});if(result.isError)throw new Error(result.content?.find(c=>c.type==='text')?.text||'Could not open the file');attach(result._meta?.['lyx/native']);}catch(error){notice(error.message);}}
-  app.addEventListener('toolinput',({arguments:args})=>{if(args?.file){needsFileOpen=true;if(connected)openFile();}});
-  app.ontoolresult=result=>attach(result._meta?.['lyx/native']);
-  try {
-    await app.connect();connected=true;
-    $('connection').textContent=extensions.modelContext?'Connected to this chat':'The host has not provided a chat context interface';
-    if(needsFileOpen&&!descriptor)await openFile();
-  } catch(error) {
-    $('connection').textContent='The plugin could not connect to this chat';
-    $('saved').textContent='Connection failed';
-    $('loading').textContent='Reopen the file. If the plugin was just installed or updated, restart Codex and try again.';
-    notice(error.message);
+  let connected=false,needsFileOpen=false,opening;
+  function waitingForFile(){
+    if(!connected || descriptor || opening || connectionPhase==='error')return;
+    $('saved').textContent='Waiting for file';
+    $('loading').textContent='Waiting for a file from Codex. Open a .lyx file in this chat, or ask Codex to open your document.';
+    $('connection').textContent='Chat connected · Waiting for a file';
+    $('save').disabled=$('add').disabled=true;
+    renderConnection();
   }
+  async function openFile(){
+    if(opening)return opening;
+    const serial=attachmentSerial;
+    if(!descriptor){
+      connectionPhase='connecting';renderConnection();
+      $('saved').textContent='Opening';$('loading').textContent='Starting native LyX…';
+    }
+    opening=(async()=>{try{
+      const result=await app.callServerTool({name:'start_native_lyx',arguments:{}});
+      if(attachmentSerial!==serial)return;
+      if(result.isError)throw toolError(result,'Could not open the file');
+      const value=resultDescriptor(result);
+      if(!value)throw new Error('The host did not return an editor session. Reopen the .lyx file in Codex.');
+      attach(value);
+    }catch(error){if(attachmentSerial===serial){
+      if(descriptor)notice(`Could not open the requested file. ${error.message}`);
+      else connectionFailed(error);
+    }}
+    finally{opening=undefined;}})();
+    return opening;
+  }
+  app.addEventListener('toolinput',({arguments:args})=>{if(args?.file){needsFileOpen=true;if(connected)openFile();}});
+  app.ontoolresult=result=>{
+    const value=resultDescriptor(result);
+    if(!result?.isError && value){attach(value);return;}
+    // Delayed failures from an earlier request cannot replace a live editor.
+    if(descriptor)return;
+    if(result?.isError){connectionFailed(toolError(result,'The file could not open. Reopen it in Codex.'));return;}
+    // The file entrypoint deliberately returns empty content; its file context
+    // arrives separately via toolinput. It is not a malformed open result.
+    if(result?._meta?.['lyx/native']!==undefined || result?.structuredContent!==undefined || result?.content?.length){
+      connectionFailed(new Error('The host did not return an editor session. Reopen the .lyx file in Codex.'));return;
+    }
+    waitingForFile();
+  };
+  retryStartup=async({retry=false}={})=>{
+    try {
+      if(!connected){await app.connect();connected=true;}
+      $('connection').textContent=extensions.modelContext?'Connected to this chat':'The host has not provided a chat context interface';
+      if(needsFileOpen&&!descriptor)await openFile();
+      else{
+        if(retry&&!descriptor)connectionPhase='connecting';
+        waitingForFile();
+      }
+    } catch(error) {
+      $('connection').textContent='The plugin could not connect to this chat';
+      $('loading').textContent='Use Retry to reconnect. If the plugin was just installed or updated, reopen the file after restarting Codex.';
+      connectionFailed(error);
+    }
+  };
+  await retryStartup();
 }

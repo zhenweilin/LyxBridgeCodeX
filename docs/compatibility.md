@@ -2,9 +2,21 @@
 
 Verified desktop host on October 22, 2026: **Codex 26.1016.51333 (build 21161)**. The installation CLI was **0.163.0-alpha.11**. The desktop and CLI versions identify different components; installing the CLI alone does not supply the required MCP App panel.
 
+The installed host inspected later on the same date was **26.1016.62342 (build 21477)**, with bundled CLI **0.163.0-alpha.11.2**. Its file-opening contract was checked in the application resources; the earlier manual interaction results do not establish a complete UI verification of this newer build. The file-open tool's `queued` response is an acknowledgement, not a success or failure result. Display the target chat in the main window and confirm the actual panel.
+
 The current integration uses `@openai/mcp-extensions` 0.2.1 and `@modelcontextprotocol/ext-apps` 1.7.5, pinned in the lockfile. The host must expose model-context updates. The HTML native-editor resource keeps its v3 address and v4 alias for compatibility with previously cached entry points.
 
+The integration uses a [file entrypoint](https://developers.openai.com/plugins/build/extensions). Keep `.lyx` in this SDK version's extension list: its schema requires a leading dot, and the inspected host normalizes both dotted and undotted forms. The host resource cache refreshes on mounting; an already-mounted iframe keeps its loaded JavaScript until reopened.
+
 The supported native baseline is LyX **2.5.3**, pinned to commit `b6a54136e3fb519bfc25e32431801a6cf6992b3a`, with Qt 5.15.2. It imports LyX 2.4 files (format 620); saving writes format 643. Source/build directories are versioned, and an upgrade changes the engine for newly opened sessions. Existing windows keep their running engine until reopened.
+
+## Updating a running checkout
+
+The web panel, MCP service, broker, and native editors have separate lifetimes. Rebuilding the web resources updates panels mounted afterward, but an existing MCP service retains its registered tools and JavaScript. Reinstalling the plugin registration alone does not prove that the host reconnected that service. The broker runs independently of Codex and may also retain older code after the host restarts.
+
+Save every document you need, including hidden LyX tabs, before deliberately closing old editing sessions for a backend update. A copy of the active document does not preserve other buffers or undo history. Do not delete the broker registry or kill processes merely to clear an opening error: the old processes may still own unsaved documents. Keep existing sessions until a controlled update is appropriate, then verify the newly connected service and a newly opened editor together.
+
+For current-host acceptance, verify the visible plugin panel and its **Connected to this chat** footer, edit and undo text, paste an editable formula, scroll in the actual side panel, and attach a selection while preserving a draft. A standalone debug page or a successful build does not verify the host's relay, clipboard, or chat-context behavior.
 
 ## Covered workflows
 
@@ -12,7 +24,7 @@ Native text/formula editing, undo/redo, clipboard formulas, tables, citations, r
 
 ## Limits
 
-- Native widgets use Fusion styling, not macOS Cocoa styling.
+- Native widgets retain a Fusion base with macOS-inspired flat chrome and arrowless rounded scrollbars. The full Macintosh widget style crashes under the tested offscreen platform, so this is not a Cocoa window. Native scrollbar hit regions match their appearance; the wider fixed gutter remains draggable without layout changes on hover.
 - Menu Paste cannot read the system clipboard in the tested Codex sandbox. Use the keyboard paste event, normally Command-V.
 - Native file drag-and-drop is not implemented; the available browser file interface does not supply authoritative original paths and sibling assets.
 - OS input-method candidate windows, physical trackpad gestures, and all host-intercepted shortcuts have not been exhaustively verified.

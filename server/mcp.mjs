@@ -6,7 +6,7 @@ import {z} from 'zod';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {renderFile,renderLyx} from '../lib/lyx.mjs';
-import {openNativeDocument,callNativeRpc,nativeRpcMethods} from '../lib/native-broker-client.mjs';
+import {openNativeDocument,reopenNativeDocument,callNativeRpc,nativeRpcMethods} from '../lib/native-broker-client.mjs';
 import {imageNativeRequestBytes} from '../lib/native-rpc-limits.mjs';
 
 const uri='ui://lyx-preview/viewer';
@@ -97,10 +97,17 @@ function modelError(error,sessionId,{write=false,attempted=false,applied=false}=
 function result(data){return{content:[{type:'text',text:`LyX preview: ${data.name}, ${data.blocks.length} paragraphs with source locations.`}],structuredContent:data};}
 function nativeResult(data){
   const descriptor={path:data.path,sessionId:data.sessionId};
-  return{content:[{type:'text',text:`Native LyX editor opened: ${data.path}`}],structuredContent:descriptor,_meta:{'lyx/native':descriptor}};
+  return{content:[{type:'text',text:`Native LyX session ready: ${data.path}`}],structuredContent:descriptor,_meta:{'lyx/native':descriptor}};
+}
+function nativeUiError(error){
+  const message=String(error?.message??'The native LyX operation failed').slice(0,2000);
+  const result={error:true,message};
+  if(typeof error?.code==='string'&&/^[a-z_]{1,64}$/.test(error.code))result.code=error.code;
+  if(error?.applied===true)result.applied=true;
+  return{isError:true,content:[{type:'text',text:message}],_meta:{'lyx/rpc':result}};
 }
 
-export function createServer({openNative=openNativeDocument,rpc=callNativeRpc}={}){
+export function createServer({openNative=openNativeDocument,reopenNative=reopenNativeDocument,rpc=callNativeRpc}={}){
   const server=new McpServer({name:'lyx-preview',version:'0.3.0'});
   new OpenAIExtensions(server);
   registerAppResource(server,'LyX document preview',uri,{},async()=>({contents:[{uri,mimeType:RESOURCE_MIME_TYPE,text:await readFile(viewerURL,'utf8'),_meta:{ui:{prefersBorder:false},'openai/ui':{preferredDisplayMode:'inline',availableDisplayModes:['inline','fullscreen']}}}]}));
@@ -124,6 +131,15 @@ export function createServer({openNative=openNativeDocument,rpc=callNativeRpc}={
     if(!path)throw new Error('The host did not provide a local path for the current .lyx file; use open_lyx to open it.');
     return nativeResult(await openNative(path));
   });
+  server.registerTool('reopen_native_lyx',{
+    title:'Reopen an exited LyX editor',
+    description:'After the user chooses Reopen editor, open a replacement only when the owning service confirms the previous native process exited. Native recovery prompts remain interactive.',
+    inputSchema:z.object({sessionId:nativeSessionId}).strict(),annotations,
+    _meta:{ui:{visibility:['app']}}
+  },async({sessionId},context)=>{
+    try{return nativeResult(await reopenNative(sessionId,{signal:context.mcpReq?.signal}));}
+    catch(error){return nativeUiError(error);}
+  });
   server.registerTool('native_lyx_rpc',{
     title:'Native LyX editor operation',description:'Relay native editor frames, input, and selections through the current plugin connection.',
     inputSchema:z.object({sessionId:z.string().min(1).max(128),method:z.enum(nativeRpcMethods),params:z.record(z.string(),z.unknown()).default({})}).strict(),
@@ -144,10 +160,7 @@ export function createServer({openNative=openNativeDocument,rpc=callNativeRpc}={
       }
       return{content:[],_meta:{'lyx/rpc':result}};
     }
-    catch(error){
-      const message=String(error?.message??'The native LyX operation failed').slice(0,2000);
-      return{isError:true,content:[{type:'text',text:message}],_meta:{'lyx/rpc':{error:true,message}}};
-    }
+    catch(error){return nativeUiError(error);}
   });
   server.registerTool('read_native_lyx',{
     title:'Read the active native LyX document',

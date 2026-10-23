@@ -30,7 +30,7 @@ test('real LyX: text input, native shortcuts, formula model, selection, save and
   assert.ok(keyboardStart>=0 && keyboardEnd>keyboardStart,'The native keyboard event block must be present');
   const browserInput={value:'',addEventListener:(type,handler)=>handlers.set(type,handler)};
   runInNewContext(`let composing=false;${frontend.slice(keyboardStart,keyboardEnd)}`,{
-    $:()=>browserInput,createNativeIme,state:undefined,
+    $:()=>browserInput,createNativeIme,state:undefined,connectionPhase:'connected',
     queue:(method,params)=>{assert.equal(method,'input');tabInputs.push(params);},
     modifiers:event=>({shift:event.shiftKey,alt:event.altKey,ctrl:event.ctrlKey,meta:event.metaKey}),
   });
