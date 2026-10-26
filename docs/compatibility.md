@@ -36,6 +36,60 @@ Native formula structure does not supply definitions omitted by the source clipb
 
 Verification uses a uniquely named private macOS pasteboard (including Unicode matching, mismatches and invalid payloads), the actual frontend paste handler and MCP relay, and separate native source/target engines. The HTML/text-only baseline loses three formula insets; native recovery preserves all three, their subscripts, prose and Unicode, and one undo restores the entire target. This automated path does not establish that a currently mounted Codex panel has reloaded the new connection.
 
+### Safe batch export on macOS
+
+Desktop LyX **2.4.1** with Qt 5.15.13 can crash before reading a document when a
+batch command loads a non-default `\ui_style`. The observed stack passes through
+`Application::applyPrefs`, `QApplication::setStyle`, and the Macintosh style or
+palette code. Changing the forced style to Fusion, or setting
+`QT_STYLE_OVERRIDE`/`QT_QPA_PLATFORM`, did not resolve this initialization failure.
+Using `\ui_style "default"` did. This is separate from the native editor's
+offscreen Fusion styling; its pinned LyX 2.5.3 engine already guards this GUI-only
+initialization in batch mode.
+
+Use the batch wrapper when exporting with an installed desktop binary:
+
+```sh
+node scripts/export-lyx.mjs \
+  --binary /Applications/LyX.app/Contents/MacOS/lyx \
+  --profile "$HOME/Library/Application Support/LyX-2.4" \
+  --format pdflatex \
+  --output /path/to/new-export.tex \
+  /path/to/saved-document.lyx
+```
+
+Choose a binary and profile compatible with the document. The wrapper does not
+convert a newer `.lyx` file to an older format. It reads the saved file on disk;
+save any editor changes you want included before exporting.
+
+Each export uses a temporary profile with the default style and session restore
+disabled. Custom layouts, modules, fonts, and converter configuration are copied;
+live sockets and FIFO pipes are skipped. Symlinks to configuration are copied as
+files or directories so LyX cannot write through them to desktop settings. The
+original profile and running editor sessions stay unchanged.
+
+The wrapper supports LaTeX source formats `latex`, `pdflatex`, `xetex`, `luatex`,
+and `dviluatex`, with a two-minute process timeout. It publishes the requested
+`.tex` file only after LyX exits successfully and produces nonempty output. It
+refuses existing destinations, including ones created during export, and removes
+its temporary profile and staging file on completion or failure. An exported
+source can still depend on the document's images, bibliography, and included
+files; this command does not package those dependencies or compile a PDF.
+
+Regression tests cover isolated preferences, symlinked configuration, FIFO pipes,
+paths with spaces, failed/empty/timed-out exports, and destination preservation.
+Run the real-binary check with a synthetic fixture (the supplied profile is read
+only):
+
+```sh
+LYX_BATCH_BINARY=/Applications/LyX.app/Contents/MacOS/lyx \
+LYX_BATCH_PROFILE="$HOME/Library/Application Support/LyX-2.4" \
+node --test test/batch-export.integration.mjs
+```
+
+This check tests both forced Macintosh and Fusion source preferences through the
+safe wrapper; it does not deliberately launch the known crashing command.
+
 ## Limits
 
 - Native widgets retain a Fusion base with macOS-inspired flat chrome and arrowless rounded scrollbars. The full Macintosh widget style crashes under the tested offscreen platform, so this is not a Cocoa window. Native scrollbar hit regions match their appearance; the wider fixed gutter remains draggable without layout changes on hover.

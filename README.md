@@ -162,6 +162,11 @@ Use `serve` for a persistent JSONL worker when performing multiple operations.
 The CLI shares the MCP editing implementation and preserves native revisions and
 unsaved buffers. See [CLI usage and measured performance](docs/edit-performance.md).
 
+For LaTeX export of a saved file, `node scripts/export-lyx.mjs --help` provides a
+separate batch command. It copies your chosen profile, uses the default theme to
+avoid the macOS LyX 2.4.1 batch-startup crash, and checks the exit status and output.
+See [safe batch export](docs/compatibility.md#safe-batch-export-on-macos).
+
 ## Development and verification
 
 ```sh
