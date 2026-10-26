@@ -1,0 +1,109 @@
+#LyX 2.5 created this file. For more info see https://www.lyx.org/
+\lyxformat 643
+\begin_document
+\begin_header
+\textclass article
+\begin_preamble
+\usepackage[noEnd=false]{algpseudocodex}
+\end_preamble
+\language english
+\inputencoding utf8
+\use_package amsmath 1
+\use_package amssymb 1
+\tracking_changes false
+\output_changes false
+\end_header
+\begin_body
+\begin_layout Title
+LyxBridgeCodeX: a quick tour
+\end_layout
+\begin_layout Section
+Write, select, and discuss
+\end_layout
+\begin_layout Standard
+We update the iterate until the residual is below the tolerance.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha\nabla f(x_k)
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Select a sentence or part of a formula, then click add to chat. Ask Codex to polish the passage or explain the notation. Review the proposed edit, then save when you are ready.
+\end_layout
+\begin_layout Section
+Use color and comments
+\end_layout
+\begin_layout Standard
+Highlight an important assumption with the A toolbar button. Open Review to annotate several passages and discuss the checked comments together.
+\end_layout
+\begin_layout Section
+Write real LaTeX pseudocode
+\end_layout
+\begin_layout Standard
+Choose LaTeX Pseudocode from the environment menu. Edit the commands, then click outside the block to render them.
+\end_layout
+\begin_layout Standard
+\begin_inset Preview
+\begin_layout Standard
+\begin_inset ERT
+status open
+\begin_layout Plain Layout
+\backslash
+begin{minipage}{0.92\backslash
+linewidth}
+\end_layout
+\begin_layout Plain Layout
+\backslash
+begin{algorithmic}[1]
+\end_layout
+\begin_layout Plain Layout
+\backslash
+State $k\backslash
+gets 0$\backslash
+label{line:init}
+\end_layout
+\begin_layout Plain Layout
+\backslash
+While{$k<3$}
+\end_layout
+\begin_layout Plain Layout
+  \backslash
+State $k\backslash
+gets k+1$\backslash
+label{line:update}
+\end_layout
+\begin_layout Plain Layout
+\backslash
+EndWhile
+\end_layout
+\begin_layout Plain Layout
+\backslash
+State \backslash
+Return $k$
+\end_layout
+\begin_layout Plain Layout
+\backslash
+end{algorithmic}
+\end_layout
+\begin_layout Plain Layout
+\backslash
+end{minipage}
+\end_layout
+\end_inset
+\end_layout
+\end_inset
+\end_layout
+\begin_layout Standard
+The update appears on line
+\begin_inset space ~
+\end_inset
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "line:update"
+\end_inset
+. Use Insert > Cross-Reference to select a source label; Go to Label returns to its LaTeX source.
+\end_layout
+\end_body
+\end_document

@@ -4,6 +4,31 @@ Native LyX editing inside Codex, with editable formulas and document context sha
 
 **v0.3.0 is an experimental source overlay for LyX 2.5.3, plus a Codex plugin.** It supplements official LyX source with a native editing bridge and presents that engine in a Codex side panel. This repository does not vendor the full LyX source or distribute a compiled application. Build the engine locally; this is not a standalone installer or a signed macOS application.
 
+## A visual quick start
+
+After [building and installing](#build-and-install), try [demo/quick-tour.lyx](demo/quick-tour.lyx):
+
+1. **Open and edit.** Ask Codex to open the file in the native LyX editor. Write text, edit formulas, and choose paragraph environments from the toolbar.
+2. **Select and discuss.** Select a passage or part of a formula, click **add to chat**, then send a request such as “Polish this sentence without changing its meaning.” Attaching a selection does not send a message.
+3. **Review and save.** Inspect proposed edits in **Review**, accept or reject changes, and click **Save** when you want to write the document to disk.
+
+The screenshots use this synthetic document in an isolated **local debugging view**. Its chat buttons are inactive; in Codex, check for **Connected to this chat** before attaching a selection. No personal documents, chat history, or account details are used.
+
+![Native LyX editor with a selected sentence, editable equation, environment and color controls, and the add to chat button in the footer.](docs/images/editor-overview.jpg)
+
+*Text and formulas stay in LyX's native editing model. The selected sentence is the context for your next request.*
+
+<details>
+<summary>Annotate several passages before sending a request</summary>
+
+Open **Review**, select a passage, and choose **Annotate selection**. Add a comment and repeat elsewhere. In Codex, check the comments you want to discuss and click **add comments to chat**, then send your request normally. The screenshot shows one example comment; it is stored as a native LyX note and is omitted from PDF output.
+
+![Review panel showing a checked comment on the sample stopping rule, with Go to text and Resolve controls.](docs/images/review-comments.jpg)
+
+See [revisions and comments](docs/native-review.md) for tracked edits, multiple comments, and navigation.
+
+</details>
+
 ## Features
 
 - Edit text and formulas using LyX's own document model, rendering, menus, and undo history.
@@ -96,15 +121,36 @@ Updating a running source checkout also requires attention to its separate backg
 
 The native toolbar has an **A ▾** button next to the environment dropdown. Select text or part of a formula, open the arrow, and choose a swatch. Clicking **A** reapplies the last color. The palette includes common colors, six recent colors, **More colors…** (including an HTML/hex field), and **Default color**. Use the arrow keys to move between swatches, Enter to apply, and Esc or an outside click to dismiss. Opening the palette retains the document selection.
 
+![The native A color palette open above a selected sentence, showing default, common, recent, and custom color choices.](docs/images/font-colors.jpg)
+
 Colors use native LyX formatting and remain editable, undoable, and portable to PDF. Custom definitions and the formatting change undo together. Default color preserves other font properties. For math, select within one cell; recoloring replaces selected color wrappers while preserving the formula. Inside raw LaTeX/ERT, use LaTeX color commands instead; the toolbar is disabled there. Open a fresh native editor session after rebuilding to load the toolbar.
 
 ## LaTeX pseudocode
 
 Choose **LaTeX Pseudocode** from the environment dropdown and press Enter. Edit the literal LaTeX source, then click outside the block or choose **Render LaTeX Pseudocode**. The native preview uses the same source as PDF export. Click the preview and its LaTeX box to edit again.
 
+**Edit the source:** paired commands define the loop and its indentation.
+
+![Editable LaTeX pseudocode with State, While, EndWhile, Return, and literal line labels inside a native LyX preview block.](docs/images/pseudocode-source.jpg)
+
+**Click outside to render:** LyX displays the compiled pseudocode with line numbers. Small label markers are editor navigation aids; they do not appear in the PDF.
+
+![The same pseudocode rendered in LyX, with numbered statements, an indented while loop, and a native reference below it.](docs/images/pseudocode-preview.jpg)
+
 The dropdown includes While, For, For All, If/Else, Repeat/Until, Function, Procedure, State, Return, Comment and Input/Output templates. Inside a source block they insert commands at the caret; outside they create a complete block. LaTeX controls indentation and numbering. New blocks use `algpseudocodex` with visible end statements; existing `algpseudocode` or `algpseudocodex` package settings are retained. TeX and the chosen package must be installed.
 
 Literal `\label{line:update}` commands in raw LaTeX now appear in LyX's Cross-Reference dialog. Insert a standard native reference and use Go to Label to return to its source. The index refreshes on editing and undo without inserting extra labels or changing exported code. Final numbers come from LaTeX; the editor shows source label names. Comments, verbatim examples, and common macro definitions are excluded. Macro expansion, external TeX files, and arbitrary TeX conditionals are not evaluated; source renames do not rewrite existing references.
+
+<details>
+<summary>Find a LaTeX line label in Insert → Cross-Reference</summary>
+
+Select `line:update` under **Available Labels**. Use **Add** to move it to **Selected Labels**, then **OK** to insert the reference. **Go to Label** returns to the corresponding source command.
+
+![Cross-Reference dialog listing line:init and line:update as LaTeX source labels, with line:update selected and Go to Label available.](docs/images/source-labels.jpg)
+
+*The screenshot is cropped below the document-path row.*
+
+</details>
 
 See the [PDF guide](demo/pseudocode-guide.pdf), [editable LyX examples](demo/pseudocode-demo.lyx), and [standalone LaTeX examples](demo/pseudocode-demo.tex). The [guide source](demo/pseudocode-guide/main.tex) includes a line-label example. Regenerate all sources with `node scripts/generate-pseudocode-demo.mjs`, or only the guide with `--guide-only`. Existing Enumerate content is not converted automatically. After rebuilding, open a fresh document session to use the new native commands.
 
