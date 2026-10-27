@@ -1,0 +1,1093 @@
+#LyX 2.4 created this file. For more info see https://www.lyx.org/
+\lyxformat 620
+\begin_document
+\begin_header
+\textclass article
+\begin_preamble
+\usepackage[a4paper,margin=22mm]{geometry}
+\usepackage{lmodern}
+\end_preamble
+\language english
+\inputencoding utf8
+\fontencoding T1
+\paperfontsize 10
+\use_package amsmath 1
+\use_package amssymb 1
+\secnumdepth -1
+\tracking_changes false
+\output_changes false
+\end_header
+\begin_body
+\begin_layout Section
+Interaction sample 1: Gradient updates
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{1}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{1}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{1}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 1. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 2: Step sizes
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{2}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{2}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{2}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 2. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 3: Residuals
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{3}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{3}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{3}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 3. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 4: Feasible points
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{4}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{4}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{4}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 4. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 5: Projections
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{5}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{5}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{5}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 5. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 6: Quadratic models
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{6}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{6}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{6}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 6. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 7: Coordinate updates
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{7}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{7}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{7}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 7. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 8: Stopping rules
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{8}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{8}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{8}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 8. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 9: Line searches
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{9}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{9}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{9}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 9. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 10: Local models
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{10}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{10}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{10}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 10. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 11: Norms and distances
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{11}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{11}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{11}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 11. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 12: Averaging
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{12}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{12}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{12}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 12. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 13: Perturbations
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{13}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{13}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{13}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 13. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 14: Conditioning
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{14}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{14}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{14}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 14. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 15: Constraints
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{15}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{15}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{15}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 15. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 16: Sparse vectors
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{16}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{16}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{16}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 16. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 17: Dual variables
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{17}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{17}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{17}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 17. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 18: Error bounds
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{18}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{18}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{18}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 18. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 19: Descent estimates
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{19}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{19}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{19}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 19. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 20: Initialization
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{20}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{20}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{20}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 20. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 21: Restart rules
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{21}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{21}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{21}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 21. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 22: Parameter choices
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{22}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{22}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{22}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 22. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 23: Model comparisons
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{23}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{23}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{23}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 23. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 24: Consistency checks
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{24}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{24}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{24}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 24. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+\end_layout
+\begin_layout Section
+Interaction sample 25: Final verification
+\end_layout
+\begin_layout Standard
+Each section is a self-contained synthetic example for testing the editor. Read the paragraph, move the pointer across several lines, and select a phrase in either direction. Every sentence was written for this demonstration; no personal manuscript, unpublished result, or private file is included.
+\end_layout
+\begin_layout Standard
+The model uses a vector of real variables and a smooth quadratic objective. The displayed expressions are native editable formula insets. Clicking inside a formula should place the mathematical cursor at the requested symbol. Scrolling past the equation should preserve its spacing, subscripts, and surrounding text.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+f_{25}(x)=\frac{1}{2}\sum_{i=1}^{n}(x_i-b_i)^2,\qquad \nabla f_{25}(x)=x-b.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+To test sustained scrolling, move through several sections without pausing, then reverse direction. Observe whether the content continues moving after the wheel has stopped. A delayed response can indicate queued input, while an increasingly irregular display may indicate work in frame capture, transport, or presentation.
+\end_layout
+\begin_layout Standard
+To test a growing selection, begin near the top of the document and drag toward the lower edge of the viewport. Keep the button held as the editor scrolls into later sections. The highlighted range should follow the pointer, and releasing the button should end the gesture promptly.
+\end_layout
+\begin_layout Standard
+\begin_inset Formula \[
+x_{k+1}=x_k-\alpha_k\nabla f_{25}(x_k),\qquad r_k=\left\|x_{k+1}-x_k\right\|_2.
+\]
+\end_inset
+\end_layout
+\begin_layout Standard
+Open the Review panel and repeat the same gesture. Reading annotations should not interrupt the active selection. After releasing the pointer, the review list and prepared clipboard may catch up. An explicit request to create a comment must still capture the complete selected passage at that moment.
+\end_layout
+\begin_layout Standard
+This document intentionally mixes prose, headings, short lists, and mathematics. Its PDF uses explicit page breaks to provide exactly twenty-five numbered pages. The continuous LyX editing view does not display PDF page boundaries, so compare the numbered section headings when repeating an interaction or reporting a delayed response.
+\end_layout
+\begin_layout Enumerate
+Checkpoint 25. Select one sentence, then reverse the selection direction.
+\end_layout
+\begin_layout Enumerate
+Release the pointer, pause, and verify that scrolling and highlighting stop.
+\end_layout
+\end_body
+\end_document

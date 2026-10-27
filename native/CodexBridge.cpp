@@ -33,6 +33,7 @@
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
 #include <QInputMethodEvent>
@@ -94,6 +95,11 @@ class CodexBridge : public QObject {
     bool contextPress_ = false;
     bool dismissedMenuPress_ = false;
     bool textPreviewInitialized_ = false;
+    Buffer const * checkedDiskBuffer_ = nullptr;
+    QString checkedDiskPath_;
+    qint64 checkedDiskSize_ = -1;
+    QDateTime checkedDiskModified_;
+    QElapsedTimer diskCheckTimer_;
     int pendingInput_ = 0;
     QPointer<QWidget> compositionTarget_;
     QMetaObject::Connection compositionDestroyed_;
@@ -390,6 +396,24 @@ class CodexBridge : public QObject {
             {"text", document["selection"]}, {"start", document["selectionStart"]},
             {"end", document["selectionEnd"]}};
     }
+    void checkExternalModification(Buffer & buffer, bool force) {
+        QString const path = toqstr(buffer.fileName().absFileName());
+        QFileInfo const info(path);
+        // Input, its state barrier and the next frame used to checksum the
+        // entire file twice each. Metadata checks are cheap and a periodic
+        // checksum also catches same-size rewrites with preserved timestamps.
+        // Explicit document reads always verify; native save/reload checks
+        // remain authoritative and do not use this display polling cache.
+        if (force || checkedDiskBuffer_ != &buffer || checkedDiskPath_ != path
+            || checkedDiskSize_ != info.size() || checkedDiskModified_ != info.lastModified()
+            || !diskCheckTimer_.isValid() || diskCheckTimer_.elapsed() >= 1000) {
+            checkedDiskBuffer_ = &buffer; checkedDiskPath_ = path;
+            checkedDiskSize_ = info.size(); checkedDiskModified_ = info.lastModified();
+            buffer.fileName().refresh();
+            buffer.checkExternalModification();
+            diskCheckTimer_.start();
+        }
+    }
     QJsonObject state(bool includeSource) {
         ensureCodexColorToolbar(app_);
         auto * bv = bufferView();
@@ -437,15 +461,14 @@ class CodexBridge : public QObject {
                 buffer.updatePreviews();
             }
         }
-        buffer.checkExternalModification();
+        checkExternalModification(buffer, includeSource);
         auto & cursor = bv->cursor();
         QJsonObject result{{"ready", true}, {"path", toqstr(buffer.fileName().absFileName())},
             {"uiReady", true}, {"interactionRequired", false},
             {"capabilities", QJsonObject{{"pointerCancel", true}, {"editSelection", true}, {"compositionGuard", true}, {"selectionSnapshots", true}, {"imagePaste", true}, {"imagePasteChunks", true}, {"wheelInput", true}}},
             {"inputPending", pendingInput_ > 0},
             {"modified", !buffer.isClean()},
-            {"externalModified", buffer.notifiesExternalModification()
-                || (buffer.fileName().exists() && buffer.isChecksumModified())},
+            {"externalModified", buffer.notifiesExternalModification()},
             {"hasSelection", cursor.selection()},
             {"cursor", position(cursor)}, {"selectionStart", position(cursor.selectionBegin())},
             {"selectionEnd", position(cursor.selectionEnd())},

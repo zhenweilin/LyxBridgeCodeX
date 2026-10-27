@@ -14,6 +14,8 @@ import {createNativeReview,addNativeCommentsToChat} from './native-review.mjs';
 const $ = id => document.getElementById(id);
 let descriptor, state, app, extensions, frameSerial = -1, pollPromise, composing = false, scale = 1, attachmentSerial=0;
 let inputQueue = Promise.resolve(), noticeTimer;
+let lastInteraction=-Infinity,reviewRefreshTimer;
+const backgroundQuietMs=180;
 let selectionClipboard,clipboardKey,clipboardRequest,editGeneration=0,pendingEdits=0,addingSelection=false;
 let connectionPhase='connecting',retryStartup,retryBusy=false,reopenBusy=false;
 let documentOpened=false;
@@ -192,6 +194,9 @@ function showState(next) {
 function clipboardSelection(next){return next?.clipboardSelection??{kind:'document',hasSelection:next?.hasSelection,text:next?.selection,start:next?.selectionStart,end:next?.selectionEnd};}
 function selectionKey(next){const selection=clipboardSelection(next);return selection.hasSelection?JSON.stringify([editGeneration,next.path,selection]):null;}
 function prepareClipboard(next){
+  // A drag produces many intermediate selections. Copying each one serializes
+  // native MIME and can compete with the next move; prepare only its endpoint.
+  if(pendingEdits || pointerDrag.active)return;
   if(composing || next?.inputMethod?.composing){clipboardKey=undefined;selectionClipboard=undefined;return;}
   const target=descriptor,menuClipboard=nativeMenuClipboard,key=selectionKey(next);
   if(key===clipboardKey)return;
@@ -231,6 +236,7 @@ function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParam
     && !(params.type.startsWith('key') && [0x1000020,0x1000021,0x1000022,0x1000023].includes(params.key)))
     || method==='command'||method==='clipboard';
   if(changesSelection){
+    lastInteraction=performance.now();
     pendingEdits++;
     editGeneration++;selectionClipboard=undefined;clipboardKey=undefined;
   }
@@ -267,7 +273,10 @@ function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParam
     }
   }).finally(()=>{
     if(changesSelection)pendingEdits--;
-    review.refresh();
+    if(changesSelection){
+      prepareClipboard(state);
+      scheduleReviewRefresh();
+    }
     // The input acknowledgement precedes Qt's edit; also wake after the state
     // barrier so the last drag position is painted when interaction stops.
     frameLoop.request();
@@ -327,11 +336,28 @@ async function pollFrame() {
 // Request the next active frame promptly. The loop still allows only one
 // frame in flight, so a slower host/encoder cannot build a frame backlog.
 const frameLoop=createNativeFrameLoop({draw:poll,isVisible:()=>!document.hidden,activeInterval:16});
-function reviewTask(work,{observational=false}={}){
+function backgroundReadsReady(){
+  return !pendingEdits && !pointerDrag.active && !composing && !state?.inputMethod?.composing
+    && performance.now()-lastInteraction>=backgroundQuietMs;
+}
+function scheduleReviewRefresh(){
+  clearTimeout(reviewRefreshTimer);
+  reviewRefreshTimer=setTimeout(()=>{
+    reviewRefreshTimer=undefined;
+    if(connectionPhase==='connected' && !document.hidden && backgroundReadsReady())review.refresh();
+  },backgroundQuietMs);
+}
+function reviewTask(work,{observational=false,passive=false}={}){
   const target=descriptor,path=state?.path;
   if(!target || connectionPhase==='error' || sessionExited(target))return Promise.reject(new Error('Open a native document first.'));
+  if(passive && !backgroundReadsReady()){scheduleReviewRefresh();return Promise.resolve();}
   if(!observational){pendingEdits++;editGeneration++;selectionClipboard=undefined;clipboardKey=undefined;}
   const task=nativeInputs.enqueue(async()=>{
+    // Input may arrive after a passive read was queued. Do not wedge an
+    // expensive whole-document snapshot between that gesture's next events.
+    if(passive && (!backgroundReadsReady() || descriptor!==target)){
+      scheduleReviewRefresh();return;
+    }
     const next=await rpc('selection',{},target);
     if(next.path!==path)throw new Error('The active document changed. Refresh review first.');
     const result=await work(next,target);
@@ -344,7 +370,7 @@ function reviewTask(work,{observational=false}={}){
   return task;
 }
 const review=createNativeReview({
-  read:()=>reviewTask(next=>next,{observational:true}),
+  read:({passive=false}={})=>reviewTask(next=>next,{observational:true,passive}),
   run:(operation,params={},expected)=>{
     // An add-comment draft retains the original revision and selection. For
     // review controls capture the visible selection before entering the queue.
@@ -360,7 +386,7 @@ const review=createNativeReview({
   changed:()=>frameLoop.request(),focus:()=>$('input').focus({preventScroll:true}),notice,
 });
 // Model edits can arrive independently of the browser's input queue.
-const reviewTimer=setInterval(()=>{if(connectionPhase==='connected' && !document.hidden && !pendingEdits && !composing && !state?.inputMethod?.composing)review.refresh();},2000);
+const reviewTimer=setInterval(()=>{if(connectionPhase==='connected' && !document.hidden && backgroundReadsReady())review.refresh();},2000);
 reviewTimer?.unref?.();
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){pointerDrag.cancel('hidden');ime.cancel();}else frameLoop.request();

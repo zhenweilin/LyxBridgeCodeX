@@ -76,6 +76,73 @@ test('viewport-sized editor leaves host height control with the host',async()=>{
   assert.equal(ui.appOptions.autoResize,false,'Content-height reporting would feed native frame height back into the host');
 });
 
+test('continuous wheel input defers whole-document review reads until the gesture settles',async()=>{
+  let reads=0;
+  const ui=await harness(async request=>{
+    if(request.method==='selection')reads++;
+    return {...state(request.sessionId),stateAfterInput:request.method==='input',sourceRevision:'revision',
+      capabilities:{review:true},review:{comments:[],tracking:false},width:800,height:600,serial:1,
+      surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,png:'',scrollViewport:{x:0,y:0,width:800,height:600}}]};
+  });
+  ui.attach('A');await ui.paint();ui.get('review-toggle').onclick();await flush();
+  assert.equal(reads,1);
+  for(let i=0;i<35;i++){
+    await ui.wheel(3);await flush();await ui.paint();
+    for(const callback of ui.intervals)callback();await flush();
+    assert.equal(reads,1,'Neither input completion nor passive polling interrupts continuous scrolling');
+  }
+  const stopped=ui.time();while(ui.time()<stopped+220)await ui.paint();await flush();
+  assert.equal(reads,2,'One final review snapshot catches up after input is quiet');
+});
+
+test('drag selection stays responsive with review open and only prepares the final clipboard',async()=>{
+  let reads=0,selected='',copies=[];
+  const ui=await harness(async request=>{
+    if(request.method==='selection')reads++;
+    if(request.method==='input' && request.params.type==='pointermove')selected=`Selected through ${request.params.x}`;
+    if(request.method==='clipboard'){copies.push(request.params.expectedSelection.text);return {clipboard:{text:selected}};}
+    return {...state(request.sessionId),stateAfterInput:request.method==='input',sourceRevision:'revision',
+      hasSelection:!!selected,selection:selected,
+      clipboardSelection:{kind:'document',hasSelection:!!selected,text:selected,start:[],end:[]},
+      capabilities:{review:true,pointerCancel:true},review:{comments:[],tracking:false},
+      width:800,height:600,serial:1,surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,png:''}]};
+  });
+  ui.attach('A');await ui.paint();ui.get('review-toggle').onclick();await flush();
+  const image={dataset:{surface:'main'},getBoundingClientRect:()=>({left:0,top:0})};
+  const pointer=(type,x)=>ui.get('surfaces').dispatch(type,{pointerId:1,clientX:x,clientY:200,
+    button:0,buttons:type==='pointerup'?0:1,target:{closest:()=>image}});
+  await pointer('pointerdown',200);await flush();
+  for(let i=0;i<35;i++){
+    await pointer('pointermove',210+i);await flush();await ui.paint();
+    for(const callback of ui.intervals)callback();await flush();
+    assert.equal(reads,1,'The open review panel cannot serialize the whole document mid-drag');
+    assert.equal(copies.length,0,'Intermediate selections do not trigger native MIME copies');
+  }
+  await pointer('pointerup',244);await flush();await flush();
+  assert.deepEqual(copies,['Selected through 244']);
+  const stopped=ui.time();while(ui.time()<stopped+220)await ui.paint();await flush();
+  assert.equal(reads,2);
+  assert.match(ui.get('selection').textContent,/Selected through 244/);
+});
+
+test('starting a comment immediately after selecting text still captures a full draft',async()=>{
+  let reads=0;
+  const ui=await harness(async request=>{
+    if(request.method==='selection')reads++;
+    return {...state(request.sessionId),stateAfterInput:request.method==='input',sourceRevision:'revision',
+      hasSelection:true,selection:'Immediate comment target',
+      clipboardSelection:{kind:'document',hasSelection:true,text:'Immediate comment target',start:[],end:[]},
+      capabilities:{review:true},review:{comments:[],tracking:false}};
+  });
+  ui.attach('A');await ui.paint();
+  await ui.wheel(1);await flush();
+  await ui.get('review-new').onclick();
+  assert.equal(reads,1,'Explicit comment capture is never deferred as passive polling');
+  assert.equal(ui.get('review-draft').hidden,false);
+  assert.equal(ui.get('review-quote').textContent,'Immediate comment target');
+  assert.equal(ui.get('review-error').textContent,'');
+});
+
 test('the actual paste handler requests native recovery only on a capable connection',async()=>{
   for(const supported of [true,false]){
     const calls=[];

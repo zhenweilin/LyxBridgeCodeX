@@ -1,5 +1,88 @@
 # Scroll performance verification
 
+## Long-document scrolling and selection
+
+The new regression uses synthetic documents of 150 and 3,000 paragraphs (about
+76 KB and 1.51 MB), with the same 1100 × 750 viewport and isolated empty profile.
+Baseline and candidate engines run sequentially. Fifty samples per interaction
+measure native input, its state barrier, and frame retrieval; five additional
+samples measure explicit full-document snapshots.
+
+The native state path previously calculated the complete disk-file checksum twice
+per call. Input acknowledgement, post-input state, and frame retrieval each ran
+that path. It now checks file metadata and verifies the checksum when metadata or
+the active buffer changes, on explicit full-document reads, or once per second.
+The periodic fallback detects same-size rewrites with preserved timestamps.
+LyX's native save/reload conflict checks and exact revision guards are unchanged.
+
+The browser also defers passive review snapshots until input has been quiet for
+180 ms and no drag is held. A passive read rechecks that condition when it reaches
+the input queue. Clipboard prefetch waits for the final selection instead of
+serializing every intermediate drag selection. Pointer endpoints, input order,
+explicit review actions and guarded copies retain their existing checks.
+
+| 3,000-paragraph operation | Before median / p95 | After median / p95 |
+| --- | --- | --- |
+| Wheel input + state + frame | 46.68 / 48.32 ms | 16.26 / 17.02 ms |
+| Drag move + state + frame | 38.91 / 46.87 ms | 8.41 / 16.20 ms |
+| Changed frame alone | 24.70 / 25.86 ms | 14.25 / 15.01 ms |
+| Unchanged frame | 14.76 / 15.23 ms | 4.62 / 4.91 ms |
+
+The corresponding short-document cycle medians were 17.77 → 16.25 ms for scrolling
+and 10.13 → 8.45 ms for dragging. Full snapshots still take about 74 ms for the
+long fixture; moving passive reads out of an active gesture matters independently
+of the native checksum improvement. These measurements exclude the Codex relay,
+image decoding and display; they do not establish an end-to-end frame rate.
+The content-free [benchmark results](benchmarks/long-document-performance.json)
+include both document sizes and all sampled operations.
+
+Validation: 366 unit/protocol cases passed in an isolated copy of the staged
+commit. Seven targeted native cases also passed,
+covering long-document forward/reverse selection near the last paragraph,
+fractional scrolling and zoom, drag cancellation, frame cache/resize/dialog
+lifecycle, and external-change/save-conflict behavior. Browser-handler tests verify that
+an open review sidebar does not insert whole-document reads during continuous
+scrolling/dragging, and that only the final drag selection is copied. Explicit
+comment capture immediately after selection still reads the complete document.
+
+### Sustained interaction
+
+The [25-page demo](../demo/long-document/README.md) contains only synthetic text,
+50 native displayed formulas, lists and explicit PDF page breaks. PDF inspection
+confirmed 25 pages and readable first/last pages; the native view also displayed
+the formulas correctly.
+
+A 40-second native edge-drag grew the selection from 4,510 characters in the first
+five-second bucket to 26,935 in the last. State median rose from 0.48 to 1.08 ms;
+frame median changed from 14.67 to 15.07 ms (p95 16.91 to 17.47 ms). RSS changed
+from about 229 to 232 MiB. This run did not reproduce an accumulating
+stall, though extracting a larger selection still costs more. Reproduce with
+`node scripts/benchmark-sustained-selection.mjs`; the test uses its own process
+and never operates on a live manuscript. Source preservation and stable endpoints
+after pointer release passed. An intermediate probe encountered an empty time
+bucket and failed while summarizing it; its raw samples were not retained, so the
+gap cannot be attributed to the editor. The saved final run retains all samples,
+reports maxima and empty buckets explicitly, and had samples in every bucket.
+
+The actual frontend was also exercised in the Codex in-app browser through a
+separate loopback broker, with Review open: a 15-second scrolling run followed by
+a 30-second run, then 51 drag gestures over another 30 seconds. The last 60 frame
+RPCs had median/p95 31.5/34.2 ms after the first scroll run, 28.8/33.1 ms after the
+second, and 32.8/36.0 ms after dragging. The native view visibly reached section
+21 and retained a selected passage afterward. These browser measurements include
+the local HTTP broker but **not the Codex MCP relay**, and measure RPC completion,
+not physical input-to-display latency. They establish stability for this test,
+not parity with desktop LyX in every document or session.
+
+Reproduce with `node scripts/benchmark-long-document.mjs`; select a saved baseline
+with `LYX_CODEX_BINARY`. Run `node --test test/native.long-document.integration.mjs`
+for correctness. Both use synthetic documents in disposable engines. Rebuild the
+frontend and native engine to install the changes. Existing panels and engine
+processes retain their loaded code; preserve unsaved documents and hidden tabs
+before any deliberate session replacement.
+
+## Earlier verification
+
 Verified on October 22, 2026 in local editors 0.2.13 and 0.2.15. These changes are included in the 0.3.0 source candidate. Packaged releases remain paused.
 
 ## Second optimization round: 0.2.15

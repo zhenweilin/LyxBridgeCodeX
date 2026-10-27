@@ -100,7 +100,7 @@ export function createNativeReview({read,run,attach,available,changed,focus,noti
     const version=epoch,serial=operationSerial;
     const task=(async()=>{
       try{
-        const next=await read();
+        const next=await read({passive:true});
         if(version===epoch && serial===operationSerial && next?.ready)render(next);
       }catch(error){
         if(version===epoch && serial===operationSerial)set($('review-error'),'textContent',error.message);

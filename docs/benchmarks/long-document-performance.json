@@ -1,0 +1,436 @@
+{
+  "scope": "native socket; excludes Codex relay and browser presentation",
+  "fixture": "Synthetic prose; 150 and 3000 paragraphs",
+  "method": "Sequential native engines, 50 samples per interaction, 5 full snapshots; 1100x750 viewport; empty profile",
+  "before": [
+    {
+      "paragraphs": 150,
+      "bytes": 75725,
+      "viewport": {
+        "width": 1100,
+        "height": 750
+      },
+      "summary": {
+        "wheelInput": {
+          "samples": 50,
+          "medianMs": 0.64,
+          "p95Ms": 0.69
+        },
+        "postInputState": {
+          "samples": 50,
+          "medianMs": 2.28,
+          "p95Ms": 2.52
+        },
+        "changedFrame": {
+          "samples": 50,
+          "medianMs": 14.83,
+          "p95Ms": 15.78
+        },
+        "wheelCycle": {
+          "samples": 50,
+          "medianMs": 17.77,
+          "p95Ms": 18.8
+        },
+        "unchangedFrame": {
+          "samples": 50,
+          "medianMs": 5.21,
+          "p95Ms": 5.54
+        },
+        "dragInput": {
+          "samples": 50,
+          "medianMs": 0.63,
+          "p95Ms": 0.71
+        },
+        "dragState": {
+          "samples": 50,
+          "medianMs": 2.22,
+          "p95Ms": 2.48
+        },
+        "dragFrame": {
+          "samples": 50,
+          "medianMs": 7.26,
+          "p95Ms": 14.84
+        },
+        "dragCycle": {
+          "samples": 50,
+          "medianMs": 10.13,
+          "p95Ms": 17.73
+        },
+        "fullSnapshot": {
+          "samples": 5,
+          "medianMs": 3.09,
+          "p95Ms": 3.11
+        }
+      }
+    },
+    {
+      "paragraphs": 3000,
+      "bytes": 1508426,
+      "viewport": {
+        "width": 1100,
+        "height": 750
+      },
+      "summary": {
+        "wheelInput": {
+          "samples": 50,
+          "medianMs": 10.02,
+          "p95Ms": 10.64
+        },
+        "postInputState": {
+          "samples": 50,
+          "medianMs": 11.95,
+          "p95Ms": 12.33
+        },
+        "changedFrame": {
+          "samples": 50,
+          "medianMs": 24.7,
+          "p95Ms": 25.86
+        },
+        "wheelCycle": {
+          "samples": 50,
+          "medianMs": 46.68,
+          "p95Ms": 48.32
+        },
+        "unchangedFrame": {
+          "samples": 50,
+          "medianMs": 14.76,
+          "p95Ms": 15.23
+        },
+        "dragInput": {
+          "samples": 50,
+          "medianMs": 10.18,
+          "p95Ms": 10.43
+        },
+        "dragState": {
+          "samples": 50,
+          "medianMs": 11.86,
+          "p95Ms": 12.2
+        },
+        "dragFrame": {
+          "samples": 50,
+          "medianMs": 16.78,
+          "p95Ms": 24.91
+        },
+        "dragCycle": {
+          "samples": 50,
+          "medianMs": 38.91,
+          "p95Ms": 46.87
+        },
+        "fullSnapshot": {
+          "samples": 5,
+          "medianMs": 76.99,
+          "p95Ms": 78.28
+        }
+      }
+    }
+  ],
+  "after": [
+    {
+      "paragraphs": 150,
+      "bytes": 75725,
+      "viewport": {
+        "width": 1100,
+        "height": 750
+      },
+      "summary": {
+        "wheelInput": {
+          "samples": 50,
+          "medianMs": 0.11,
+          "p95Ms": 0.17
+        },
+        "postInputState": {
+          "samples": 50,
+          "medianMs": 1.75,
+          "p95Ms": 1.92
+        },
+        "changedFrame": {
+          "samples": 50,
+          "medianMs": 14.39,
+          "p95Ms": 15.16
+        },
+        "wheelCycle": {
+          "samples": 50,
+          "medianMs": 16.25,
+          "p95Ms": 17.07
+        },
+        "unchangedFrame": {
+          "samples": 50,
+          "medianMs": 4.66,
+          "p95Ms": 4.97
+        },
+        "dragInput": {
+          "samples": 50,
+          "medianMs": 0.12,
+          "p95Ms": 0.14
+        },
+        "dragState": {
+          "samples": 50,
+          "medianMs": 1.69,
+          "p95Ms": 1.84
+        },
+        "dragFrame": {
+          "samples": 50,
+          "medianMs": 6.62,
+          "p95Ms": 14.04
+        },
+        "dragCycle": {
+          "samples": 50,
+          "medianMs": 8.45,
+          "p95Ms": 15.81
+        },
+        "fullSnapshot": {
+          "samples": 5,
+          "medianMs": 2.9,
+          "p95Ms": 3.02
+        }
+      }
+    },
+    {
+      "paragraphs": 3000,
+      "bytes": 1508426,
+      "viewport": {
+        "width": 1100,
+        "height": 750
+      },
+      "summary": {
+        "wheelInput": {
+          "samples": 50,
+          "medianMs": 0.11,
+          "p95Ms": 0.16
+        },
+        "postInputState": {
+          "samples": 50,
+          "medianMs": 1.73,
+          "p95Ms": 1.95
+        },
+        "changedFrame": {
+          "samples": 50,
+          "medianMs": 14.25,
+          "p95Ms": 15.01
+        },
+        "wheelCycle": {
+          "samples": 50,
+          "medianMs": 16.26,
+          "p95Ms": 17.02
+        },
+        "unchangedFrame": {
+          "samples": 50,
+          "medianMs": 4.62,
+          "p95Ms": 4.91
+        },
+        "dragInput": {
+          "samples": 50,
+          "medianMs": 0.12,
+          "p95Ms": 0.2
+        },
+        "dragState": {
+          "samples": 50,
+          "medianMs": 1.67,
+          "p95Ms": 1.81
+        },
+        "dragFrame": {
+          "samples": 50,
+          "medianMs": 6.6,
+          "p95Ms": 14.27
+        },
+        "dragCycle": {
+          "samples": 50,
+          "medianMs": 8.41,
+          "p95Ms": 16.2
+        },
+        "fullSnapshot": {
+          "samples": 5,
+          "medianMs": 73.77,
+          "p95Ms": 73.97
+        }
+      }
+    }
+  ],
+  "sustainedSelection": {
+    "scope": "native socket; excludes host relay and browser presentation",
+    "buckets": [
+      {
+        "seconds": "0-5",
+        "samples": 151,
+        "selectionChars": 4510,
+        "rssKiB": 234896,
+        "stateMedian": 0.48,
+        "stateP95": 2.16,
+        "stateMax": 2.6527079999996204,
+        "frameMedian": 14.67,
+        "frameP95": 16.91,
+        "frameMax": 18.944917000000714
+      },
+      {
+        "seconds": "5-10",
+        "samples": 149,
+        "selectionChars": 7614,
+        "rssKiB": 235856,
+        "stateMedian": 0.59,
+        "stateP95": 2.21,
+        "stateMax": 2.929374999999709,
+        "frameMedian": 14.68,
+        "frameP95": 16.71,
+        "frameMax": 19.186792000000423
+      },
+      {
+        "seconds": "10-15",
+        "samples": 148,
+        "selectionChars": 11085,
+        "rssKiB": 235920,
+        "stateMedian": 0.66,
+        "stateP95": 2.32,
+        "stateMax": 4.8093340000013995,
+        "frameMedian": 14.73,
+        "frameP95": 16.98,
+        "frameMax": 18.820958000000246
+      },
+      {
+        "seconds": "15-20",
+        "samples": 149,
+        "selectionChars": 14074,
+        "rssKiB": 236464,
+        "stateMedian": 0.66,
+        "stateP95": 2.48,
+        "stateMax": 3.990749999997206,
+        "frameMedian": 14.67,
+        "frameP95": 16.68,
+        "frameMax": 18.931916999998066
+      },
+      {
+        "seconds": "20-25",
+        "samples": 148,
+        "selectionChars": 17303,
+        "rssKiB": 236576,
+        "stateMedian": 0.81,
+        "stateP95": 2.44,
+        "stateMax": 2.938833000000159,
+        "frameMedian": 14.66,
+        "frameP95": 16.66,
+        "frameMax": 20.231667000000016
+      },
+      {
+        "seconds": "25-30",
+        "samples": 146,
+        "selectionChars": 20216,
+        "rssKiB": 237360,
+        "stateMedian": 0.86,
+        "stateP95": 2.62,
+        "stateMax": 2.9386669999948936,
+        "frameMedian": 15.01,
+        "frameP95": 17.19,
+        "frameMax": 19.536457999995037
+      },
+      {
+        "seconds": "30-35",
+        "samples": 146,
+        "selectionChars": 23542,
+        "rssKiB": 237408,
+        "stateMedian": 0.96,
+        "stateP95": 2.69,
+        "stateMax": 3.06866699999955,
+        "frameMedian": 15.16,
+        "frameP95": 16.99,
+        "frameMax": 18.978290999999444
+      },
+      {
+        "seconds": "35-40",
+        "samples": 144,
+        "selectionChars": 26935,
+        "rssKiB": 237648,
+        "stateMedian": 1.08,
+        "stateP95": 2.92,
+        "stateMax": 3.194791999994777,
+        "frameMedian": 15.07,
+        "frameP95": 17.47,
+        "frameMax": 20.231583000000683
+      }
+    ]
+  },
+  "browser": {
+    "scope": "In-app browser, standalone loopback broker; not MCP relay",
+    "scrollRuns": [
+      {
+        "seconds": 15.014,
+        "timings": {
+          "frame": {
+            "samples": 60,
+            "medianMs": 31.5,
+            "p95Ms": 34.2
+          },
+          "input": {
+            "samples": 60,
+            "medianMs": 1.6,
+            "p95Ms": 31.9
+          },
+          "state": {
+            "samples": 60,
+            "medianMs": 3.5,
+            "p95Ms": 31.8
+          },
+          "selection": {
+            "samples": 6,
+            "medianMs": 9.7,
+            "p95Ms": 19.8
+          }
+        }
+      },
+      {
+        "continuousSeconds": 30,
+        "timings": {
+          "frame": {
+            "samples": 60,
+            "medianMs": 28.8,
+            "p95Ms": 33.1
+          },
+          "input": {
+            "samples": 60,
+            "medianMs": 1.8,
+            "p95Ms": 27.6
+          },
+          "state": {
+            "samples": 60,
+            "medianMs": 3.4,
+            "p95Ms": 31.8
+          },
+          "selection": {
+            "samples": 16,
+            "medianMs": 8.5,
+            "p95Ms": 19.8
+          }
+        }
+      }
+    ],
+    "dragResult": {
+      "seconds": 30.207,
+      "gestures": 51,
+      "timings": {
+        "frame": {
+          "samples": 60,
+          "medianMs": 32.8,
+          "p95Ms": 36
+        },
+        "input": {
+          "samples": 60,
+          "medianMs": 12.8,
+          "p95Ms": 34
+        },
+        "state": {
+          "samples": 60,
+          "medianMs": 3.5,
+          "p95Ms": 34.1
+        },
+        "selection": {
+          "samples": 60,
+          "medianMs": 8.6,
+          "p95Ms": 12.8
+        },
+        "clipboard": {
+          "samples": 49,
+          "medianMs": 31.8,
+          "p95Ms": 34.6
+        }
+      }
+    }
+  }
+}
