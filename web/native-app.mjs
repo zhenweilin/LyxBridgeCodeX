@@ -5,6 +5,8 @@ import {createNativeMenuClipboard} from './native-menu-clipboard.mjs';
 import {addNativeSelectionToChat} from './native-chat.mjs';
 import {createNativeInputQueue} from './native-input-queue.mjs';
 import {createNativeFrameLoop} from './native-frame-loop.mjs';
+import {createNativeFrameImages} from './native-frame-images.mjs';
+import {readNativeFrame} from './native-frame-transport.mjs';
 import {createNativePointerDrag} from './native-pointer-drag.mjs';
 import {nativeImePosition} from './native-ime-position.mjs';
 import {createNativeIme} from './native-ime.mjs';
@@ -16,17 +18,19 @@ let descriptor, state, app, extensions, frameSerial = -1, pollPromise, composing
 let inputQueue = Promise.resolve(), noticeTimer;
 let lastInteraction=-Infinity,reviewRefreshTimer;
 const backgroundQuietMs=180;
-let selectionClipboard,clipboardKey,clipboardRequest,editGeneration=0,pendingEdits=0,addingSelection=false;
+let selectionClipboard,clipboardKey,clipboardRequest,editGeneration=0,clipboardGeneration=0,pendingEdits=0,addingSelection=false;
 let connectionPhase='connecting',retryStartup,retryBusy=false,reopenBusy=false;
 let documentOpened=false;
+let disposed=false,teardownPromise;
 const failedCancellations=new Map();
 const exitedSessions=new Set();
 const nativeSurfaces=new Map();
+const frameImages=createNativeFrameImages();
 const nativeInputs=createNativeInputQueue();
 const standalone = window.parent === window;
 const rpcTimings=new Map();
 function recordRpcTiming(method,elapsed,target){
-  if(descriptor!==target)return;
+  if(disposed || descriptor!==target)return;
   const samples=rpcTimings.get(method)??[];
   samples.push(elapsed);if(samples.length>60)samples.shift();rpcTimings.set(method,samples);
   // Bounded, content-free diagnostics for measuring the actual host relay.
@@ -39,7 +43,7 @@ function recordRpcTiming(method,elapsed,target){
   }
   $('surfaces').dataset.rpcTimings=JSON.stringify(summary);
 }
-function notice(text) {$('notice').textContent = text;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{$('notice').textContent='';},9000);}
+function notice(text) {if(disposed)return;$('notice').textContent = text;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{$('notice').textContent='';},9000);}
 function nativeError(value,fallback='Native LyX operation failed') {
   const error=new Error(typeof value?.message==='string'?value.message:typeof value?.error==='string'?value.error:fallback);
   if(typeof value?.code==='string' && /^[a-z_]{1,64}$/.test(value.code))error.code=value.code;
@@ -74,7 +78,7 @@ function renderConnection() {
   }
 }
 function connectionFailed(error,target=descriptor) {
-  if(descriptor!==target)return;
+  if(disposed || descriptor!==target)return;
   const firstFailure=connectionPhase!=='error';
   if(target && error.confirmedExit===true){
     exitedSessions.add(target.sessionId);frameLoop.stop();
@@ -106,12 +110,19 @@ async function rpc(method, params = {}, target=descriptor) {
   const started=performance.now();
   try{
   if(!standalone){
-    const response=await app.callServerTool({name:'native_lyx_rpc',arguments:{sessionId:target.sessionId,method,params}});
+    const frameBridge=window.openai;
+    const response=method==='frame'
+      ? await readNativeFrame({sessionId:target.sessionId,params},{app,openai:frameBridge})
+      : await app.callServerTool({name:'native_lyx_rpc',arguments:{sessionId:target.sessionId,method,params}});
     if(response.isError)throw toolError(response,'Native LyX operation failed');
     const result=response._meta?.['lyx/rpc'];
     if(!result)throw new Error('The host did not return native LyX state');
     if(result.error)throw nativeError(result);
     if(sessionExited(target))throw nativeError({code:'session_exited',message:'This native LyX session has exited'});
+    if(method==='frame' && !disposed && descriptor===target){
+      const transport=typeof frameBridge?.callTool==='function'?'host-compatibility':'mcp-apps';
+      if($('surfaces').dataset.frameTransport!==transport)$('surfaces').dataset.frameTransport=transport;
+    }
     if(method==='input' && params.replyWithState===true && descriptor===target)
       $('surfaces').dataset.inputStateCombined=String(result.stateAfterInput===true);
     return response._meta?.['lyx/ui']?{...result,uiCapabilities:response._meta['lyx/ui']}:result;
@@ -149,7 +160,7 @@ function updateInputPosition(next) {
     height:`${position.height}px`,lineHeight:`${position.height}px`,fontSize:`${position.height*.8}px`});
 }
 function showState(next) {
-  if (typeof next?.ready!=='boolean') return;
+  if (disposed || typeof next?.ready!=='boolean') return;
   if(sessionExited()){renderConnection();return;}
   const wasReady=state?.ready;
   state = next;
@@ -192,11 +203,11 @@ function showState(next) {
   renderConnection();
 }
 function clipboardSelection(next){return next?.clipboardSelection??{kind:'document',hasSelection:next?.hasSelection,text:next?.selection,start:next?.selectionStart,end:next?.selectionEnd};}
-function selectionKey(next){const selection=clipboardSelection(next);return selection.hasSelection?JSON.stringify([editGeneration,next.path,selection]):null;}
+function selectionKey(next){const selection=clipboardSelection(next);return selection.hasSelection?JSON.stringify([clipboardGeneration,next.path,selection]):null;}
 function prepareClipboard(next){
   // A drag produces many intermediate selections. Copying each one serializes
   // native MIME and can compete with the next move; prepare only its endpoint.
-  if(pendingEdits || pointerDrag.active)return;
+  if(disposed || pendingEdits || pointerDrag.active)return;
   if(composing || next?.inputMethod?.composing){clipboardKey=undefined;selectionClipboard=undefined;return;}
   const target=descriptor,menuClipboard=nativeMenuClipboard,key=selectionKey(next);
   if(key===clipboardKey)return;
@@ -205,9 +216,9 @@ function prepareClipboard(next){
   clipboardRequest=(async()=>{
     try{
       await inputQueue;
-      if(descriptor!==target || selectionKey(state)!==key)return;
+      if(disposed || descriptor!==target || selectionKey(state)!==key)return;
       const result=await rpc('clipboard',{action:'copy',expectedSelection:clipboardSelection(state),expectedPath:state.path},target);
-      if(descriptor===target && selectionKey(state)===key){
+      if(!disposed && descriptor===target && selectionKey(state)===key){
         selectionClipboard=result.clipboard;
         menuClipboard.prepare(state,selectionClipboard);
       }
@@ -223,7 +234,7 @@ function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParam
   const target=descriptor,menuClipboard=nativeMenuClipboard;
   const cancellation=method==='input' && (params.type==='pointercancel'
     || params.type==='composition' && params.text==='');
-  if(!target || sessionExited(target) || connectionPhase==='error' && !cancellation)return Promise.resolve();
+  if(disposed || !target || sessionExited(target) || connectionPhase==='error' && !cancellation)return Promise.resolve();
   frameLoop.request();
   const menuPointer=method==='input' && params.type.startsWith('pointer') && menuPoint(params);
   // Opening a menu preserves the document selection and the prepared MIME.
@@ -235,10 +246,17 @@ function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParam
   const changesSelection=(method==='input' && !stableMenuPointer && (params.type!=='pointermove'||params.buttons)
     && !(params.type.startsWith('key') && [0x1000020,0x1000021,0x1000022,0x1000023].includes(params.key)))
     || method==='command'||method==='clipboard';
+  // Ordinary viewport scrolling still needs a state barrier, but does not edit
+  // the selected content. Reuse MIME only for that narrow case; the native
+  // selection identity below still catches actual selection changes.
+  const preservesClipboard=method==='input' && params.type==='wheel' && !pointerDrag.active
+    && nativeSurfaces.size===1
+    && nativeWheelQueueOptions(params,nativeSurfaces.get(params.surface)).coalesceKey!==undefined;
   if(changesSelection){
     lastInteraction=performance.now();
     pendingEdits++;
-    editGeneration++;selectionClipboard=undefined;clipboardKey=undefined;
+    editGeneration++;
+    if(!preservesClipboard){clipboardGeneration++;selectionClipboard=undefined;clipboardKey=undefined;}
   }
   inputQueue=nativeInputs.enqueue(async queuedParams=>{
     // Reserve the operation's place before asynchronous paste preparation so
@@ -254,7 +272,7 @@ function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParam
     const next=needsState && !(method==='input' && result.stateAfterInput===true)?await rpc('state',{},target):result;
     if(descriptor===target)showState(next);
     if(menuReceipt){
-      pendingEdits++;editGeneration++;selectionClipboard=undefined;clipboardKey=undefined;
+      pendingEdits++;editGeneration++;clipboardGeneration++;selectionClipboard=undefined;clipboardKey=undefined;
       try{
         if(await menuClipboard.update(next,{receipt:menuReceipt})){
           const committed=await rpc('state',{},target);
@@ -263,7 +281,7 @@ function queue(method, params, {menuReceipt,coalesceKey,prepareParams,mergeParam
       }finally{pendingEdits--;}
     }
   },{coalesceKey:coalesceKey?`${attachmentSerial}:${coalesceKey}`:undefined,data:params,merge:mergeParams}).catch(error=>{
-    if(descriptor===target){
+    if(!disposed && descriptor===target){
       notice(error.message);
       // Tool error envelopes also carry broker timeouts and lost sessions.
       // Without proof that the mutation was rejected, never send it again.
@@ -290,7 +308,7 @@ function poll() {
   return pollPromise;
 }
 async function pollFrame() {
-  if (!descriptor || sessionExited() || document.hidden) return;
+  if (disposed || !descriptor || sessionExited() || document.hidden) return;
   const sessionDescriptor=descriptor,generation=editGeneration,editsAtStart=pendingEdits;
   try {
     const viewport=$('viewport');
@@ -300,7 +318,7 @@ async function pollFrame() {
     const nativeSize=nativeViewportSize(size);
     if(!nativeSize)return;
     const frame=await rpc('frame',{...nativeSize,serial:frameSerial},sessionDescriptor);
-    if(descriptor!==sessionDescriptor || sessionExited(sessionDescriptor))return;
+    if(disposed || descriptor!==sessionDescriptor || sessionExited(sessionDescriptor))return;
     if(typeof frame.ready!=='boolean')throw new Error('The editor returned an incomplete state');
     connectionPhase='connected';renderConnection();
     if(!standalone)$('connection').textContent=extensions?.modelContext?'Connected to this chat':'The host has not provided a chat context interface';
@@ -313,23 +331,24 @@ async function pollFrame() {
     if(frame.width>0 && frame.height>0)
       scale=fitNativeViewport(container,frame,size.width);
     if (frame.surfaces) {
-      frameSerial=frame.serial;
       nativeSurfaces.clear();
       for(const surface of frame.surfaces)nativeSurfaces.set(surface.id,surface);
       const active=new Set();
       for (const surface of frame.surfaces) {
         active.add(surface.id);
         let image=container.querySelector(`[data-surface="${surface.id}"]`);
-        if (!image) {image=new Image();image.draggable=false;image.dataset.surface=surface.id;image.alt=surface.main?'LyX document editor':'LyX dialog';container.append(image);}
-        image.src=`data:image/png;base64,${surface.png}`;
+        if (!image) {image=document.createElement('canvas');image.dataset.surface=surface.id;image.setAttribute('role','img');image.setAttribute('aria-label',surface.main?'LyX document editor':'LyX dialog');container.append(image);}
+        await frameImages.update(image,surface.png);
+        if(disposed || descriptor!==sessionDescriptor || sessionExited(sessionDescriptor))return;
         Object.assign(image.style,{left:`${surface.x}px`,top:`${surface.y}px`,width:`${surface.width}px`,height:`${surface.height}px`,zIndex:surface.main?'0':'1'});
       }
-      for(const image of container.children)if(!active.has(image.dataset.surface))image.remove();
+      for(const image of [...container.children])if(!active.has(image.dataset.surface)){frameImages.remove(image);image.remove();}
+      frameSerial=frame.serial;
       $('loading').hidden=true;
     }
     updateInputPosition(state);
   } catch(error) {
-    if(descriptor!==sessionDescriptor)return;
+    if(disposed || descriptor!==sessionDescriptor)return;
     connectionFailed(error,sessionDescriptor);throw error;
   }
 }
@@ -337,11 +356,12 @@ async function pollFrame() {
 // frame in flight, so a slower host/encoder cannot build a frame backlog.
 const frameLoop=createNativeFrameLoop({draw:poll,isVisible:()=>!document.hidden,activeInterval:16});
 function backgroundReadsReady(){
-  return !pendingEdits && !pointerDrag.active && !composing && !state?.inputMethod?.composing
+  return !disposed && !pendingEdits && !pointerDrag.active && !composing && !state?.inputMethod?.composing
     && performance.now()-lastInteraction>=backgroundQuietMs;
 }
 function scheduleReviewRefresh(){
   clearTimeout(reviewRefreshTimer);
+  if(disposed)return;
   reviewRefreshTimer=setTimeout(()=>{
     reviewRefreshTimer=undefined;
     if(connectionPhase==='connected' && !document.hidden && backgroundReadsReady())review.refresh();
@@ -349,9 +369,9 @@ function scheduleReviewRefresh(){
 }
 function reviewTask(work,{observational=false,passive=false}={}){
   const target=descriptor,path=state?.path;
-  if(!target || connectionPhase==='error' || sessionExited(target))return Promise.reject(new Error('Open a native document first.'));
+  if(disposed || !target || connectionPhase==='error' || sessionExited(target))return Promise.reject(new Error('Open a native document first.'));
   if(passive && !backgroundReadsReady()){scheduleReviewRefresh();return Promise.resolve();}
-  if(!observational){pendingEdits++;editGeneration++;selectionClipboard=undefined;clipboardKey=undefined;}
+  if(!observational){pendingEdits++;editGeneration++;clipboardGeneration++;selectionClipboard=undefined;clipboardKey=undefined;}
   const task=nativeInputs.enqueue(async()=>{
     // Input may arrive after a passive read was queued. Do not wedge an
     // expensive whole-document snapshot between that gesture's next events.
@@ -394,9 +414,28 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('resize',()=>frameLoop.request());
 window.addEventListener('blur',()=>{pointerDrag.cancel('blur');ime.cancel();});
 window.addEventListener('pagehide',()=>{pointerDrag.cancel('pagehide');ime.cancel();frameLoop.stop();});
-window.addEventListener('pageshow',()=>{if(descriptor&&!sessionExited()){frameLoop.start();frameLoop.request();}});
+window.addEventListener('pageshow',()=>{if(!disposed&&descriptor&&!sessionExited()){frameLoop.start();frameLoop.request();}});
+function teardownPanel(){
+  if(teardownPromise)return teardownPromise;
+  // Cancel native transient input before refusing further events. Already
+  // accepted edits retain their queue order and finish before the host receives
+  // its teardown acknowledgement. Never save or close the native buffer here.
+  pointerDrag.cancel('teardown');ime.cancel();
+  disposed=true;attachmentSerial++;
+  frameLoop.stop();clearInterval(reviewTimer);
+  clearTimeout(reviewRefreshTimer);clearTimeout(noticeTimer);clearTimeout(hoverTimer);
+  pendingHover=undefined;hoverScheduled=false;
+  frameImages.clear();nativeSurfaces.clear();$('surfaces').replaceChildren();
+  review.update({ready:false},`disposed:${attachmentSerial}`);
+  teardownPromise=inputQueue.finally(()=>{
+    nativeMenuClipboard?.destroy();nativeMenuClipboard=undefined;
+    descriptor=state=selectionClipboard=clipboardKey=undefined;
+    failedCancellations.clear();rpcTimings.clear();
+  }).then(()=>({}));
+  return teardownPromise;
+}
 function attach(value) {
-  if (!value?.sessionId || sessionExited(value))return;
+  if (disposed || !value?.sessionId || sessionExited(value))return;
   if(descriptor?.sessionId===value.sessionId && descriptor.url===value.url && descriptor.token===value.token){
     // Repeated host notifications describe the same live editor. Preserve its
     // selection, focus and decoded images instead of flashing a loading view.
@@ -419,7 +458,7 @@ function attach(value) {
     notice:text=>{if(descriptor===target)notice(text);},
   });
   selectionClipboard=clipboardKey=undefined;
-  nativeSurfaces.clear();$('surfaces').replaceChildren();
+  nativeSurfaces.clear();frameImages.clear();$('surfaces').replaceChildren();
   $('filename').textContent=value.path?.split('/').at(-1)||'LyX Editor';
   $('filename').title=value.path||'';
   $('saved').textContent='Connecting';$('saved').title='';
@@ -444,12 +483,13 @@ const pointerDrag=createNativePointerDrag({
     if(state?.capabilities?.pointerCancel)queue('input',params);
   },
 });
-let pendingHover,hoverScheduled=false;
+let pendingHover,hoverScheduled=false,hoverTimer;
 function scheduleHover(params){
+  if(disposed)return;
   pendingHover=params;
   if(hoverScheduled)return;
   hoverScheduled=true;
-  setTimeout(async()=>{
+  hoverTimer=setTimeout(async()=>{
     const current=pendingHover;pendingHover=undefined;
     if(!pointerDrag.active && current)await queue('input',current);
     hoverScheduled=false;
@@ -461,7 +501,7 @@ for (const type of ['pointerdown','pointermove','pointerup']) surfaces.addEventL
   const dragging=pointerDrag.active;
   if(dragging && (dragging.pointerId!==event.pointerId || type==='pointerdown'))return;
   if(!dragging && type==='pointerup')return;
-  let image=dragging?.image || event.target.closest('img[data-surface]');
+  let image=dragging?.image || event.target.closest('canvas[data-surface]');
   if(!image)return;
   const bounds=image.getBoundingClientRect();
   const params={type,surface:image.dataset.surface,x:Math.round((event.clientX-bounds.left)/scale),y:Math.round((event.clientY-bounds.top)/scale),button:event.button,buttons:event.buttons,...modifiers(event)};
@@ -492,14 +532,14 @@ for(const type of ['pointercancel','lostpointercapture'])surfaces.addEventListen
 });
 surfaces.addEventListener('dblclick',event=>{
   if(connectionPhase==='error'){event.preventDefault();return;}
-  const image=event.target.closest('img[data-surface]');if(!image)return;
+  const image=event.target.closest('canvas[data-surface]');if(!image)return;
   const r=image.getBoundingClientRect();
   queue('input',{type:'dblclick',surface:image.dataset.surface,x:Math.round((event.clientX-r.left)/scale),y:Math.round((event.clientY-r.top)/scale),button:event.button,buttons:event.buttons,...modifiers(event)});
 });
 surfaces.addEventListener('contextmenu',event=>event.preventDefault());
 surfaces.addEventListener('wheel',event=>{
   if(connectionPhase==='error'){event.preventDefault();return;}
-  const image=event.target.closest('img[data-surface]');if(!image)return;
+  const image=event.target.closest('canvas[data-surface]');if(!image)return;
   const params=normalizeNativeWheel(event,{surface:image.dataset.surface,bounds:image.getBoundingClientRect(),scale});
   if(!params)return;
   if(params.zoomFactor!==undefined && state?.capabilities?.wheelInput!==true){
@@ -631,6 +671,7 @@ if(standalone){
   // temporarily measures html at max-content, including the native frame;
   // feeding that height back to the host can repeatedly resize its scrollbar.
   app=new App({name:'LyX Native Editor',version:'0.3.0'},{},{autoResize:false});
+  app.onteardown=teardownPanel;
   extensions=new OpenAIExtensions(app);
   let connected=false,needsFileOpen=false,opening;
   function waitingForFile(){
@@ -642,6 +683,7 @@ if(standalone){
     renderConnection();
   }
   async function openFile(){
+    if(disposed)return;
     if(opening)return opening;
     const serial=attachmentSerial;
     if(!descriptor){
@@ -664,6 +706,7 @@ if(standalone){
   }
   app.addEventListener('toolinput',({arguments:args})=>{if(args?.file){needsFileOpen=true;if(connected)openFile();}});
   app.ontoolresult=result=>{
+    if(disposed)return;
     const value=resultDescriptor(result);
     if(!result?.isError && value){attach(value);return;}
     // Delayed failures from an earlier request cannot replace a live editor.
@@ -677,8 +720,10 @@ if(standalone){
     waitingForFile();
   };
   retryStartup=async({retry=false}={})=>{
+    if(disposed)return;
     try {
       if(!connected){await app.connect();connected=true;}
+      if(disposed)return;
       $('connection').textContent=extensions.modelContext?'Connected to this chat':'The host has not provided a chat context interface';
       if(needsFileOpen&&!descriptor)await openFile();
       else{

@@ -25,11 +25,17 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
 function element(){
   const listeners=new Map(),pointers=new Set();
   return {style:{},dataset:{},children:[],hidden:true,value:'',scrollLeft:0,scrollTop:0,
+    getContext(){return {clearRect(){},drawImage(){}};},
     addEventListener(type,callback){listeners.set(type,[...(listeners.get(type)??[]),callback]);},
     dispatch(type,extra={}){return Promise.all((listeners.get(type)??[]).map(callback=>callback({type,target:this,preventDefault(){},...extra})));},
-    setAttribute(){},append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},remove(){},focus(){},
+    setAttribute(){},append(...items){for(const item of items)item.parentNode=this;this.children.push(...items);},
+    replaceChildren(...items){this.children=items;},
+    remove(){if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(child=>child!==this);},focus(){},
     setPointerCapture(id){pointers.add(id);},hasPointerCapture(id){return pointers.has(id);},releasePointerCapture(id){pointers.delete(id);},
-    insertBefore(item){this.children.push(item);},querySelector(){return null;},
+    insertBefore(item){this.children.push(item);},querySelector(selector){
+      const id=/^\[data-surface="([^"]+)"\]$/.exec(selector)?.[1];
+      return id?this.children.find(child=>child.dataset?.surface===id)??null:null;
+    },
     getBoundingClientRect(){return {left:0,top:0,width:800,height:600};},
     get clientWidth(){return this.getBoundingClientRect().width;},
     get clientHeight(){return this.getBoundingClientRect().height;},
@@ -39,7 +45,7 @@ function state(sessionId){return {ready:true,path:`/${sessionId}.lyx`,modified:f
   selection:'',selectionStart:[],selectionEnd:[],inputMethod:{enabled:false},
   capabilities:{pointerCancel:true}};}
 
-async function harness(call,{connect=async()=>{},open=async()=>({}),reopen=async()=>({}),standaloneDescriptor,fetch}={}){
+async function harness(call,{connect=async()=>{},open=async()=>({}),reopen=async()=>({}),standaloneDescriptor,fetch,openai}={}){
   const nodes=new Map(),get=id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);};
   const document={hidden:false,body:element(),getElementById:get,createElement:element,createTextNode:text=>({textContent:text}),querySelector:element,
     addEventListener(){},removeEventListener(){}};
@@ -52,12 +58,16 @@ async function harness(call,{connect=async()=>{},open=async()=>({}),reopen=async
   },extensions:{
     modelContext:{async update(context){contexts.push(context);return {updateId:'accepted'};}},
     message:{async send(draft){drafts.push(draft);return {};}}}};
-  const timers=new Map(),intervals=[];let timerId=0,clock=0;
-  const window={parent:{},addEventListener(){}};
+  const timers=new Map(),intervals=[],bitmaps=[];let timerId=0,clock=0;
+  const windowEvents=new Map();
+  const window={parent:{},openai,addEventListener(type,callback){windowEvents.set(type,callback);}};
   if(standaloneDescriptor){window.parent=window;window.__LYX_NATIVE__=standaloneDescriptor;}
   await vm.runInNewContext(`(async()=>{${bundle.outputFiles[0].text}\n})()`,{__host:host,document,window,fetch,
-    setInterval:callback=>{intervals.push(callback);return 0;},
-    crypto:webcrypto,TextEncoder,TextDecoder,atob,btoa,Image:element,performance:{now:()=>clock},
+    setInterval:callback=>{intervals.push(callback);return callback;},
+    clearInterval:callback=>{const i=intervals.indexOf(callback);if(i>=0)intervals.splice(i,1);},
+    crypto:webcrypto,TextEncoder,TextDecoder,atob,btoa,Blob,
+    createImageBitmap:async()=>{const bitmap={width:800,height:600,closed:false,close(){this.closed=true;}};bitmaps.push(bitmap);return bitmap;},
+    Image:element,performance:{now:()=>clock},
     setTimeout:(callback,delay=0)=>{timers.set(++timerId,{callback,at:clock+delay});return timerId;},clearTimeout:id=>timers.delete(id)});
   await flush();
   const attach=id=>host.app.ontoolresult({_meta:{'lyx/native':{sessionId:id,path:`/${id}.lyx`}}});
@@ -66,7 +76,9 @@ async function harness(call,{connect=async()=>{},open=async()=>({}),reopen=async
     timers.delete(id);clock=timer.at;timer.callback();await flush();};
   const wheel=async(deltaY=1)=>get('surfaces').dispatch('wheel',{deltaMode:0,deltaX:0,deltaY,clientX:200,clientY:200,
     target:{closest:()=>({dataset:{surface:'main'},getBoundingClientRect:()=>({left:0,top:0})})}});
-  return {get,attach,commit,contexts,drafts,flush,paint,wheel,intervals,time:()=>clock,appOptions:host.appOptions,
+  return {get,attach,commit,contexts,drafts,flush,paint,wheel,intervals,bitmaps,time:()=>clock,appOptions:host.appOptions,
+    teardown:()=>host.app.onteardown?.({}),timerCount:()=>timers.size,
+    windowEvent:type=>windowEvents.get(type)?.(),
     result:value=>host.app.ontoolresult(value),
     toolinput:args=>host.listeners.get('toolinput')?.({arguments:args})};
 }
@@ -74,6 +86,101 @@ async function harness(call,{connect=async()=>{},open=async()=>({}),reopen=async
 test('viewport-sized editor leaves host height control with the host',async()=>{
   const ui=await harness(async request=>state(request.sessionId));
   assert.equal(ui.appOptions.autoResize,false,'Content-height reporting would feed native frame height back into the host');
+});
+
+test('the real frontend routes frame reads through compatibility while edits keep their ordered MCP route',async()=>{
+  const standard=[],compatibility=[];
+  const ui=await harness(async request=>{standard.push(request);return state(request.sessionId);},{
+    openai:{async callTool(name,args){
+      compatibility.push({name,...args});
+      return {_meta:{'lyx/rpc':{...state(args.sessionId),serial:1,width:800,height:600,
+        surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,png:'AA=='}]}}};
+    }},
+  });
+  ui.attach('A');await ui.paint();await ui.commit('typed once');await flush();
+  assert.ok(compatibility.length>0);
+  assert.ok(compatibility.every(call=>call.name==='native_lyx_rpc' && call.method==='frame' && call.sessionId==='A'));
+  assert.ok(!standard.some(call=>call.method==='frame'));
+  assert.equal(ui.get('surfaces').dataset.frameTransport,'host-compatibility');
+  const edits=standard.filter(call=>call.method==='input');
+  assert.equal(edits.length,1);assert.equal(edits[0].params.text,'typed once');
+  assert.equal(ui.get('surfaces').children.length,1);
+  await ui.teardown();
+});
+
+test('host teardown stops polling, releases canvases and cannot be revived by late events',async()=>{
+  const calls=[];
+  const ui=await harness(async request=>{
+    calls.push(request);
+    return {...state(request.sessionId),width:800,height:600,serial:1,
+      surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,png:'AA=='}]};
+  });
+  ui.attach('A');await ui.paint();
+  const canvas=ui.get('surfaces').children[0],before=calls.length;
+  assert.ok(ui.timerCount()>0);assert.equal(ui.intervals.length,1);
+  await ui.teardown();
+  assert.equal(ui.timerCount(),0);assert.equal(ui.intervals.length,0);
+  assert.equal(canvas.width,0);assert.equal(canvas.height,0);
+  assert.equal(ui.get('surfaces').children.length,0);
+  await ui.teardown();ui.attach('B');ui.windowEvent('pageshow');ui.windowEvent('resize');
+  await ui.commit('ignored after disposal');await flush();
+  assert.equal(ui.timerCount(),0);assert.equal(calls.length,before);
+});
+
+test('a late frame response cannot redraw or restart a torn-down panel',async()=>{
+  const gate=deferred();
+  const ui=await harness(async request=>request.method==='frame'?gate.promise:state(request.sessionId));
+  ui.attach('A');await ui.paint();await ui.teardown();
+  gate.resolve({...state('A'),width:800,height:600,serial:1,
+    surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,png:'AA=='}]});
+  await flush();await flush();
+  assert.equal(ui.get('surfaces').children.length,0);
+  assert.equal(ui.bitmaps.length,0);assert.equal(ui.timerCount(),0);
+});
+
+test('teardown drains accepted edits once before replying without saving or closing native buffers',async()=>{
+  const gate=deferred(),calls=[];let acknowledged=false;
+  const ui=await harness(async request=>{
+    calls.push(request);
+    if(request.params.text==='first')await gate.promise;
+    return {...state(request.sessionId),stateAfterInput:request.method==='input'};
+  });
+  ui.attach('A');await ui.commit('first');await ui.commit('second');await flush();
+  const stopping=Promise.resolve(ui.teardown()).then(()=>{acknowledged=true;});
+  await ui.commit('too late');await flush();assert.equal(acknowledged,false);
+  gate.resolve();await stopping;await flush();
+  assert.deepEqual(calls.map(call=>[call.sessionId,call.method,call.params.text]),
+    [['A','input','first'],['A','input','second']]);
+  assert.equal(ui.timerCount(),0);assert.equal(ui.intervals.length,0);
+});
+
+test('teardown finishes native drag cancellation exactly once',async()=>{
+  const calls=[];
+  const ui=await harness(async request=>{calls.push(request);return {...state(request.sessionId),stateAfterInput:true};});
+  ui.attach('A');
+  const image={dataset:{surface:'main'},getBoundingClientRect:()=>({left:0,top:0})};
+  await ui.get('surfaces').dispatch('pointerdown',{pointerId:1,clientX:200,clientY:200,
+    button:0,buttons:1,target:{closest:()=>image}});
+  await flush();await ui.teardown();await ui.teardown();await flush();
+  assert.deepEqual(calls.filter(call=>call.method==='input').map(call=>call.params.type),['pointerdown','pointercancel']);
+  assert.equal(ui.timerCount(),0);
+});
+
+test('the frontend reuses pixels and releases canvases on dialog removal and document switch',async()=>{
+  let ids=['main','dialog-a','dialog-b'],png='AA==';
+  const ui=await harness(async request=>({...state(request.sessionId),width:800,height:600,serial:1,
+    surfaces:ids.map(id=>({id,main:id==='main',x:0,y:0,width:800,height:600,png}))}));
+  ui.attach('A');await ui.paint();
+  assert.equal(ui.bitmaps.length,3);assert.ok(ui.bitmaps.every(bitmap=>bitmap.closed));
+  const first=[...ui.get('surfaces').children];
+  await ui.paint();assert.equal(ui.bitmaps.length,3,'Unchanged pixels are not decoded again');
+  ids=['main'];png='AQ==';await ui.paint();
+  assert.equal(ui.bitmaps.length,4);assert.ok(ui.bitmaps.every(bitmap=>bitmap.closed));
+  assert.equal(ui.get('surfaces').children.length,1);
+  assert.ok(first.slice(1).every(canvas=>canvas.width===0&&canvas.height===0));
+  assert.equal(first[0].width,800);assert.equal(first[0].src,undefined);
+  ui.attach('B');assert.equal(first[0].width,0);assert.equal(first[0].height,0);
+  await ui.paint();assert.equal(ui.bitmaps.length,5);assert.ok(ui.bitmaps.every(bitmap=>bitmap.closed));
 });
 
 test('continuous wheel input defers whole-document review reads until the gesture settles',async()=>{
@@ -123,6 +230,39 @@ test('drag selection stays responsive with review open and only prepares the fin
   const stopped=ui.time();while(ui.time()<stopped+220)await ui.paint();await flush();
   assert.equal(reads,2);
   assert.match(ui.get('selection').textContent,/Selected through 244/);
+});
+
+test('scrolling an unchanged document selection reuses its clipboard, while editing still invalidates it',async()=>{
+  let copies=0;
+  const selected={kind:'document',hasSelection:true,text:'Selected passage',start:[],end:[]};
+  const ui=await harness(async request=>{
+    if(request.method==='clipboard'){copies++;return {clipboard:{text:selected.text}};}
+    return {...state(request.sessionId),stateAfterInput:request.method==='input',
+      hasSelection:true,selection:selected.text,clipboardSelection:selected,
+      width:800,height:600,serial:1,surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,
+        png:'',scrollViewport:{x:0,y:50,width:800,height:550}}]};
+  });
+  ui.attach('A');await ui.paint();await flush();assert.equal(copies,1);
+  for(let i=0;i<80;i++){await ui.wheel(3);await flush();}
+  assert.equal(copies,1,'Scrolling cannot repeatedly serialize the same native selection');
+  await ui.commit('edit');await flush();await flush();
+  assert.equal(copies,2,'An edit invalidates cached MIME even if selection text and positions are unchanged');
+});
+
+test('scrolling still refreshes a changed selection and wheel input outside the document is not cached',async()=>{
+  let copies=[],text='First selection',top=50;
+  const ui=await harness(async request=>{
+    if(request.method==='clipboard'){copies.push(request.params.expectedSelection.text);return {clipboard:{text}};}
+    return {...state(request.sessionId),stateAfterInput:request.method==='input',
+      hasSelection:true,selection:text,clipboardSelection:{kind:'document',hasSelection:true,text,start:[],end:[]},
+      width:800,height:600,serial:1,surfaces:[{id:'main',main:true,x:0,y:0,width:800,height:600,
+        png:'',scrollViewport:{x:0,y:top,width:800,height:600-top}}]};
+  });
+  ui.attach('A');await ui.paint();await flush();
+  text='Changed selection';await ui.wheel(3);await flush();await flush();
+  assert.deepEqual(copies,['First selection','Changed selection']);
+  top=250;await ui.paint();await flush();await ui.wheel(3);await flush();await flush();
+  assert.deepEqual(copies,['First selection','Changed selection','Changed selection']);
 });
 
 test('starting a comment immediately after selecting text still captures a full draft',async()=>{

@@ -18,8 +18,14 @@ test('real stdio MCP handshake, file handler metadata, resource and demo tool',a
   const resource=await client.readResource({uri:'ui://lyx-preview/viewer'});
   OpenAIUiResourceMetadataSchema.parse(resource.contents[0]._meta['openai/ui']);
   assert.match(resource.contents[0].text,/add to chat/);
+  assert.doesNotMatch(resource.contents[0].text,/console\.debug\s*\(/,
+    'The published preview bundle must not log complete transport payloads');
   const native=await client.readResource({uri:viewer._meta.ui.resourceUri});
   assert.match(native.contents[0].text,/Native LyX editing area/);
+  assert.doesNotMatch(native.contents[0].text,/console\.debug\s*\(/,
+    'The published native bundle must not log complete PNG frame messages');
+  assert.match(native.contents[0].text,/console\.error\s*\(/,
+    'Removing debug payloads must retain transport error diagnostics');
   assert.equal(viewer._meta.ui.resourceUri,'ui://lyx-preview/native-editor-v3',
     'New file entrypoints must remain readable by already-running 0.2.2 chat servers');
   assert.equal(list.tools.find(tool=>tool.name==='open_lyx')._meta.ui.resourceUri,viewer._meta.ui.resourceUri);
